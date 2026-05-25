@@ -1,0 +1,33 @@
+# Talk2Books — Backend Requirements
+# Install: pip install -r requirements.txt
+
+# ── API Framework ─────────────────────────────────
+quart
+quart-cors
+
+# ── LangChain Core ────────────────────────────────
+langchain
+langchain-community
+langchain-huggingface        # HuggingFaceEmbeddings (modern interface)
+langchain-qdrant             # Qdrant vector store integration
+
+# ── LLM & Orchestration ───────────────────────────
+langchain-ollama             # ChatOllama (spec requirement — was missing)
+langgraph                    # RAG chain orchestration (spec requirement — was missing)
+
+# ── Embeddings ────────────────────────────────────
+sentence-transformers        # all-mpnet-base-v2 (768-dim, spec Module 3)
+
+# ── Vector Database ───────────────────────────────
+qdrant-client
+
+# ── Document Loaders ──────────────────────────────
+pypdf                        # PDF loading
+docx2txt                     # .docx loading (spec Module 1 requirement)
+python-docx                  # .docx manipulation
+
+# ── Language Detection ────────────────────────────
+langdetect                   # spec Module 1 requirement — was missing
+
+# ── Optional ──────────────────────────────────────
+# openai                     # uncomment if using OpenAI as fallback LLM
