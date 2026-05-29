@@ -5,10 +5,13 @@ Day 1: embed_query()
 Day 2: retrieve_chunks() with Qdrant search
 Day 3: language detection + payload filtering + metadata fix
 Day 4: build_prompt() — format chunks + question into LLM prompt
+Day 5: generate_answer() — send prompt to phi4 via ChatOllama
 """
 
 import logging
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_ollama import ChatOllama
+from langchain_core.messages import HumanMessage
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from langdetect import detect, LangDetectException
@@ -24,11 +27,11 @@ log = logging.getLogger("ttb.rag_chain")
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 QDRANT_URL      = "http://localhost:6333"
 COLLECTION_NAME = "ttb_documents"
+OLLAMA_MODEL    = "phi4-mini"
+OLLAMA_BASE_URL = "http://localhost:11434"
 TOP_K           = 3
 
 # ── System prompt template ─────────────────────────────────────────────────────
-# This tells phi4 exactly what role it plays and how to behave.
-# The {context} and {question} placeholders are filled in by build_prompt().
 SYSTEM_PROMPT = """You are Talk2Books, a helpful document assistant.
 Your job is to answer the user's question using ONLY the context passages provided below.
 
@@ -48,6 +51,7 @@ Question: {question}
 Answer:"""
 
 # ── Module-level singletons ────────────────────────────────────────────────────
+# Loaded once when the module is imported — not on every function call
 embedder = HuggingFaceEmbeddings(
     model_name=EMBEDDING_MODEL,
     model_kwargs={"device": "cpu"},
@@ -55,6 +59,13 @@ embedder = HuggingFaceEmbeddings(
 )
 
 qdrant = QdrantClient(url=QDRANT_URL)
+
+llm = ChatOllama(
+    model=OLLAMA_MODEL,
+    base_url=OLLAMA_BASE_URL,
+    temperature=0.1,   # low temperature = focused, factual answers
+                       # 0.0 = fully deterministic, 1.0 = creative/random
+)
 
 
 # ── Day 1: Query Embedding ─────────────────────────────────────────────────────
@@ -101,7 +112,6 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
     lang = detect_query_language(question)
     log.info(f"Query language detected: '{lang}'")
 
-    # Build language filter using dot notation for nested metadata
     query_filter = None
     if filter_language and lang != "unknown":
         query_filter = Filter(
@@ -114,7 +124,6 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
         )
         log.info(f"Applying language filter: metadata.language = '{lang}'")
 
-    # Primary search
     results = qdrant.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
@@ -123,7 +132,6 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
         query_filter=query_filter,
     ).points
 
-    # Fallback: retry without language filter if nothing returned
     if not results and query_filter is not None:
         log.warning(
             f"No chunks found for language='{lang}'. "
@@ -136,7 +144,6 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
             with_payload=True,
         ).points
 
-    # Parse results — LangChain nests metadata under payload["metadata"]
     chunks = []
     for hit in results:
         payload  = hit.payload or {}
@@ -156,25 +163,12 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
 
 def build_prompt(question: str, chunks: list[dict]) -> str:
     """
-    Format retrieved chunks and the user's question into a structured prompt
-    ready to be sent to phi4.
-
-    Each chunk is presented as a numbered passage with its source filename
-    so phi4 can cite it in the answer.
-
-    Args:
-        question: The original user question string.
-        chunks:   List of chunk dicts returned by retrieve_chunks().
-
-    Returns:
-        A fully formatted prompt string ready for the LLM.
+    Format retrieved chunks and the user's question into a structured
+    prompt ready to be sent to phi4.
     """
     if not chunks:
-        # No context was retrieved — tell the model explicitly
         context_block = "No relevant passages were found in the documents."
     else:
-        # Format each chunk as a numbered passage block
-        # Showing the source file helps phi4 produce accurate citations
         passage_blocks = []
         for i, chunk in enumerate(chunks, 1):
             block = (
@@ -182,54 +176,108 @@ def build_prompt(question: str, chunks: list[dict]) -> str:
                 f"{chunk['text'].strip()}"
             )
             passage_blocks.append(block)
-
-        # Join all passages with a clear separator between them
         context_block = "\n\n---\n\n".join(passage_blocks)
 
-    # Fill the system prompt template with context and question
-    prompt = SYSTEM_PROMPT.format(
+    return SYSTEM_PROMPT.format(
         context=context_block,
         question=question,
     )
 
-    return prompt
+
+# ── Day 5: LLM Answer Generation ──────────────────────────────────────────────
+
+def generate_answer(prompt: str) -> str:
+    """
+    Send the formatted prompt to phi4 via Ollama and return the answer.
+
+    Uses HumanMessage because we pass the full system prompt + context
+    as one message — phi4 handles it as a single instruction block.
+
+    Args:
+        prompt: The fully formatted prompt string from build_prompt().
+
+    Returns:
+        The answer string generated by phi4.
+    """
+    log.info("Sending prompt to phi4 via Ollama...")
+
+    try:
+        response = llm.invoke([HumanMessage(content=prompt)])
+        answer   = response.content.strip()
+        log.info("Answer received from phi4.")
+        return answer
+
+    except Exception as e:
+        log.error(f"Ollama call failed: {e}")
+        return (
+            "Sorry, I could not reach the language model. "
+            "Please make sure Ollama is running with: ollama run phi4"
+        )
+
+
+# ── Day 5: Full pipeline convenience function ──────────────────────────────────
+
+def ask(question: str, filter_language: bool = True) -> dict:
+    """
+    The complete RAG pipeline in one call.
+    This is the single function that app.py will call.
+
+    Flow:
+        question → embed → Qdrant search → build prompt → phi4 → answer
+
+    Args:
+        question:        The user's question string.
+        filter_language: Whether to apply language-aware Qdrant filtering.
+
+    Returns:
+        Dict with keys:
+            answer   — the generated answer string
+            sources  — list of source filenames used
+            language — detected query language
+            chunks   — the raw retrieved chunks (for debugging)
+    """
+    log.info(f"Pipeline started for question: '{question}'")
+
+    # Step 1: Retrieve
+    chunks = retrieve_chunks(question, filter_language=filter_language)
+    log.info(f"Retrieved {len(chunks)} chunk(s) from Qdrant.")
+
+    # Step 2: Build prompt
+    prompt = build_prompt(question, chunks)
+
+    # Step 3: Generate
+    answer = generate_answer(prompt)
+
+    # Collect unique source filenames for the response
+    sources = list({c["file_name"] for c in chunks if c["file_name"] != "unknown"})
+    lang    = detect_query_language(question)
+
+    return {
+        "answer":   answer,
+        "sources":  sources,
+        "language": lang,
+        "chunks":   chunks,
+    }
 
 
 # ── Test block ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
 
-    question = "What are the deliverables for this task?"
+    questions = [
+        "What are the deliverables for this task?",
+        "What validation rules apply to the span field?",
+    ]
 
-    print("=" * 60)
-    print("STEP 1 — Retrieving chunks from Qdrant")
-    print("=" * 60)
-    chunks = retrieve_chunks(question, filter_language=True)
-    print(f"Retrieved {len(chunks)} chunk(s)\n")
-    for i, c in enumerate(chunks, 1):
-        print(f"  Chunk {i}: score={c['score']}  file={c['file_name']}")
-    print()
+    for question in questions:
+        print("\n" + "=" * 60)
+        print(f"QUESTION: {question}")
+        print("=" * 60)
 
-    print("=" * 60)
-    print("STEP 2 — Building the prompt")
-    print("=" * 60)
-    prompt = build_prompt(question, chunks)
-    print(prompt)
-    print()
+        result = ask(question)
 
-    print("=" * 60)
-    print("STEP 3 — Prompt stats")
-    print("=" * 60)
-    print(f"Total characters : {len(prompt)}")
-    print(f"Total lines      : {prompt.count(chr(10))}")
-    print(f"Passages included: {len(chunks)}")
-    print(f"Question         : {question}")
-
-    # Verify the question appears in the prompt
-    q_present = question in prompt
-    # Verify each chunk's text appears in the prompt
-    all_chunks_present = all(c['text'].strip()[:50] in prompt for c in chunks)
-
-    print()
-    print(f"Question in prompt     : {'YES ✓' if q_present       else 'NO ✗'}")
-    print(f"All chunks in prompt   : {'YES ✓' if all_chunks_present else 'NO ✗'}")
-    print(f"Answer label present   : {'YES ✓' if 'Answer:' in prompt else 'NO ✗'}")
+        print(f"\nDETECTED LANGUAGE : {result['language']}")
+        print(f"SOURCES USED      : {result['sources']}")
+        print(f"CHUNKS RETRIEVED  : {len(result['chunks'])}")
+        print(f"SCORES            : {[c['score'] for c in result['chunks']]}")
+        print(f"\nANSWER:\n{result['answer']}")
+        print()
