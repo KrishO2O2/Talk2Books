@@ -4,6 +4,7 @@ Talk2Books — Phase 3
 Day 1: embed_query()
 Day 2: retrieve_chunks() with Qdrant search
 Day 3: language detection + payload filtering + metadata fix
+Day 4: build_prompt() — format chunks + question into LLM prompt
 """
 
 import logging
@@ -25,8 +26,28 @@ QDRANT_URL      = "http://localhost:6333"
 COLLECTION_NAME = "ttb_documents"
 TOP_K           = 3
 
+# ── System prompt template ─────────────────────────────────────────────────────
+# This tells phi4 exactly what role it plays and how to behave.
+# The {context} and {question} placeholders are filled in by build_prompt().
+SYSTEM_PROMPT = """You are Talk2Books, a helpful document assistant.
+Your job is to answer the user's question using ONLY the context passages provided below.
+
+Rules you must follow:
+- Answer based strictly on the provided context. Do not use outside knowledge.
+- If the answer is not present in the context, say exactly:
+  "I could not find an answer to your question in the provided documents."
+- Be concise and direct. Do not repeat the question back.
+- If the context is in a different language than the question, answer in the question's language.
+- Cite the source filename at the end of your answer like this: [Source: filename]
+
+Context passages:
+{context}
+
+Question: {question}
+
+Answer:"""
+
 # ── Module-level singletons ────────────────────────────────────────────────────
-# Loaded once when the module is first imported — not on every function call
 embedder = HuggingFaceEmbeddings(
     model_name=EMBEDDING_MODEL,
     model_kwargs={"device": "cpu"},
@@ -80,9 +101,7 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
     lang = detect_query_language(question)
     log.info(f"Query language detected: '{lang}'")
 
-    # ── Build language filter ──────────────────────────────────────────────────
-    # LangChain's QdrantVectorStore nests metadata under a 'metadata' key.
-    # Qdrant uses dot notation to filter on nested fields: "metadata.language"
+    # Build language filter using dot notation for nested metadata
     query_filter = None
     if filter_language and lang != "unknown":
         query_filter = Filter(
@@ -95,7 +114,7 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
         )
         log.info(f"Applying language filter: metadata.language = '{lang}'")
 
-    # ── Primary search ─────────────────────────────────────────────────────────
+    # Primary search
     results = qdrant.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
@@ -104,9 +123,7 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
         query_filter=query_filter,
     ).points
 
-    # ── Fallback: retry without language filter ────────────────────────────────
-    # This happens when the document language wasn't detected correctly
-    # at ingestion time (e.g. Sample.docx got language='unknown').
+    # Fallback: retry without language filter if nothing returned
     if not results and query_filter is not None:
         log.warning(
             f"No chunks found for language='{lang}'. "
@@ -119,14 +136,11 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
             with_payload=True,
         ).points
 
-    # ── Parse results ──────────────────────────────────────────────────────────
-    # LangChain stores payload as:
-    #   { "page_content": "...", "metadata": { "source": "...", "language": "..." } }
+    # Parse results — LangChain nests metadata under payload["metadata"]
     chunks = []
     for hit in results:
         payload  = hit.payload or {}
         metadata = payload.get("metadata", {})
-
         chunks.append({
             "text":      payload.get("page_content", ""),
             "score":     round(hit.score, 4),
@@ -138,50 +152,84 @@ def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
     return chunks
 
 
+# ── Day 4: Prompt Builder ──────────────────────────────────────────────────────
+
+def build_prompt(question: str, chunks: list[dict]) -> str:
+    """
+    Format retrieved chunks and the user's question into a structured prompt
+    ready to be sent to phi4.
+
+    Each chunk is presented as a numbered passage with its source filename
+    so phi4 can cite it in the answer.
+
+    Args:
+        question: The original user question string.
+        chunks:   List of chunk dicts returned by retrieve_chunks().
+
+    Returns:
+        A fully formatted prompt string ready for the LLM.
+    """
+    if not chunks:
+        # No context was retrieved — tell the model explicitly
+        context_block = "No relevant passages were found in the documents."
+    else:
+        # Format each chunk as a numbered passage block
+        # Showing the source file helps phi4 produce accurate citations
+        passage_blocks = []
+        for i, chunk in enumerate(chunks, 1):
+            block = (
+                f"[Passage {i} — Source: {chunk['file_name']}]\n"
+                f"{chunk['text'].strip()}"
+            )
+            passage_blocks.append(block)
+
+        # Join all passages with a clear separator between them
+        context_block = "\n\n---\n\n".join(passage_blocks)
+
+    # Fill the system prompt template with context and question
+    prompt = SYSTEM_PROMPT.format(
+        context=context_block,
+        question=question,
+    )
+
+    return prompt
+
+
 # ── Test block ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
 
-    # ── Test 1: English question with language filter ──────────────────────────
-    print("=" * 58)
-    print("TEST 1 — English question (language filter ON)")
-    print("=" * 58)
-    q1 = "What are the deliverables for this task?"
-    lang1 = detect_query_language(q1)
-    chunks1 = retrieve_chunks(q1, filter_language=True)
+    question = "What are the deliverables for this task?"
 
-    print(f"Question        : {q1}")
-    print(f"Detected lang   : {lang1}")
-    print(f"Chunks returned : {len(chunks1)}\n")
+    print("=" * 60)
+    print("STEP 1 — Retrieving chunks from Qdrant")
+    print("=" * 60)
+    chunks = retrieve_chunks(question, filter_language=True)
+    print(f"Retrieved {len(chunks)} chunk(s)\n")
+    for i, c in enumerate(chunks, 1):
+        print(f"  Chunk {i}: score={c['score']}  file={c['file_name']}")
+    print()
 
-    for i, c in enumerate(chunks1, 1):
-        print(f"── Chunk {i} ──────────────────────────────────────────")
-        print(f"  Score    : {c['score']}")
-        print(f"  Language : {c['language']}")
-        print(f"  File     : {c['file_name']}")
-        print(f"  Source   : {c['source']}")
-        print(f"  Text     : {c['text'][:200]}...")
-        print()
+    print("=" * 60)
+    print("STEP 2 — Building the prompt")
+    print("=" * 60)
+    prompt = build_prompt(question, chunks)
+    print(prompt)
+    print()
 
-    # ── Test 2: Same question WITHOUT filter (for comparison) ──────────────────
-    print("=" * 58)
-    print("TEST 2 — Same question (language filter OFF)")
-    print("=" * 58)
-    chunks2 = retrieve_chunks(q1, filter_language=False)
-    print(f"Chunks returned : {len(chunks2)}\n")
+    print("=" * 60)
+    print("STEP 3 — Prompt stats")
+    print("=" * 60)
+    print(f"Total characters : {len(prompt)}")
+    print(f"Total lines      : {prompt.count(chr(10))}")
+    print(f"Passages included: {len(chunks)}")
+    print(f"Question         : {question}")
 
-    for i, c in enumerate(chunks2, 1):
-        print(f"── Chunk {i} ──────────────────────────────────────────")
-        print(f"  Score    : {c['score']}")
-        print(f"  Language : {c['language']}")
-        print(f"  File     : {c['file_name']}")
-        print(f"  Text     : {c['text'][:200]}...")
-        print()
+    # Verify the question appears in the prompt
+    q_present = question in prompt
+    # Verify each chunk's text appears in the prompt
+    all_chunks_present = all(c['text'].strip()[:50] in prompt for c in chunks)
 
-    # ── Test 3: Verify scores are descending ───────────────────────────────────
-    print("=" * 58)
-    print("TEST 3 — Score order check")
-    print("=" * 58)
-    scores = [c['score'] for c in chunks2]
-    is_descending = all(scores[i] >= scores[i+1] for i in range(len(scores)-1))
-    print(f"Scores        : {scores}")
-    print(f"Descending    : {'YES ✓' if is_descending else 'NO ✗ — something is wrong'}")
+    print()
+    print(f"Question in prompt     : {'YES ✓' if q_present       else 'NO ✗'}")
+    print(f"All chunks in prompt   : {'YES ✓' if all_chunks_present else 'NO ✗'}")
+    print(f"Answer label present   : {'YES ✓' if 'Answer:' in prompt else 'NO ✗'}")
