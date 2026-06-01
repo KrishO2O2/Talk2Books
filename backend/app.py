@@ -1,6 +1,6 @@
 """
 backend/app.py
-Talk2Books — Phase 3 Day 6
+Talk2Books — Phase 3 Day 6 (updated Day 7)
 Quart async API server — the HTTP bridge between React frontend and rag_chain.py
 
 Endpoints:
@@ -22,19 +22,17 @@ logging.basicConfig(
 )
 log = logging.getLogger("ttb.app")
 
-# Silence noisy HTTP logs from qdrant and httpx clients
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
+# ── Config ─────────────────────────────────────────────────────────────────────
+MAX_QUESTION_LENGTH = 1000   # characters — prevents absurdly long inputs
+MIN_QUESTION_LENGTH = 3      # characters — prevents single-character nonsense
+
 # ── App setup ──────────────────────────────────────────────────────────────────
 app = Quart(__name__)
-
-# cors() allows the React dev server (localhost:3000) to call this API
-# (localhost:5000) without the browser blocking the request.
-# allow_origin="*" permits all origins — fine for local development.
 app = cors(app, allow_origin="*")
 
-# Qdrant client for health check only
 qdrant_client = QdrantClient(url="http://localhost:6333")
 
 
@@ -44,13 +42,13 @@ qdrant_client = QdrantClient(url="http://localhost:6333")
 async def health():
     """
     Health check endpoint.
-    Checks that both Qdrant and Ollama are reachable before reporting healthy.
-    The frontend can call this on load to show a 'connected' indicator.
+    Checks that both Qdrant and Ollama are reachable.
+    Returns 200 if healthy, 503 if any service is down.
     """
     status = {
-        "server":  "ok",
-        "qdrant":  "unknown",
-        "ollama":  "unknown",
+        "server": "ok",
+        "qdrant": "unknown",
+        "ollama": "unknown",
     }
 
     # Check Qdrant
@@ -71,13 +69,11 @@ async def health():
         log.warning(f"Ollama health check failed: {e}")
         status["ollama"] = "unreachable"
 
-    # Overall health
     all_ok = all(v == "ok" for v in status.values())
     status["healthy"] = all_ok
 
-    http_status = 200 if all_ok else 503
     log.info(f"Health check: {status}")
-    return jsonify(status), http_status
+    return jsonify(status), 200 if all_ok else 503
 
 
 # ── POST /api/query ────────────────────────────────────────────────────────────
@@ -93,35 +89,62 @@ async def query():
     Optional:
         { "question": "...", "filter_language": false }
 
-    Returns JSON:
-        {
-            "answer":   "The deliverables include...",
-            "sources":  ["Sample.docx"],
-            "language": "en",
-            "chunks":   [ { "text": "...", "score": 0.32, ... } ]
-        }
-
-    Error response (400):
-        { "error": "Question is required." }
+    Returns 200 with answer JSON, or 400/500 with error message.
     """
-    # Parse incoming JSON body
-    data = await request.get_json()
+    # ── Parse body ─────────────────────────────────────────────────────────────
+    try:
+        data = await request.get_json(force=True, silent=True)
+    except Exception:
+        data = None
 
-    # Validate — question must be present and non-empty
-    if not data or not data.get("question", "").strip():
-        log.warning("Received request with missing or empty question.")
-        return jsonify({"error": "Question is required."}), 400
+    # ── Validate: body must be a JSON object ───────────────────────────────────
+    if not isinstance(data, dict):
+        log.warning("Request body is not valid JSON.")
+        return jsonify({
+            "error": "Request body must be valid JSON with a 'question' field."
+        }), 400
 
-    question        = data["question"].strip()
+    # ── Validate: question must be present ─────────────────────────────────────
+    question = data.get("question", "")
+
+    if not isinstance(question, str):
+        log.warning(f"Question field is not a string: {type(question)}")
+        return jsonify({
+            "error": "The 'question' field must be a string."
+        }), 400
+
+    question = question.strip()
+
+    if len(question) < MIN_QUESTION_LENGTH:
+        log.warning(f"Question too short: '{question}'")
+        return jsonify({
+            "error": f"Question must be at least {MIN_QUESTION_LENGTH} characters."
+        }), 400
+
+    # ── Validate: question must not be too long ────────────────────────────────
+    if len(question) > MAX_QUESTION_LENGTH:
+        log.warning(f"Question too long: {len(question)} chars")
+        return jsonify({
+            "error": f"Question must be under {MAX_QUESTION_LENGTH} characters."
+        }), 400
+
     filter_language = data.get("filter_language", True)
+    if not isinstance(filter_language, bool):
+        filter_language = True   # safe default if someone sends a weird value
 
-    log.info(f"Received question: '{question}' | filter_language={filter_language}")
+    log.info(f"Question: '{question}' | filter_language={filter_language}")
 
-    # Call the RAG pipeline
-    # ask() handles all errors internally and returns a safe response
-    result = ask(question, filter_language=filter_language)
+    # ── Run the RAG pipeline ───────────────────────────────────────────────────
+    try:
+        result = ask(question, filter_language=filter_language)
+    except Exception as e:
+        # Catch any unexpected pipeline errors so the server never crashes
+        log.error(f"Pipeline error: {e}", exc_info=True)
+        return jsonify({
+            "error": "An internal error occurred. Please try again."
+        }), 500
 
-    log.info(f"Returning answer ({len(result['answer'])} chars) from {result['sources']}")
+    log.info(f"Answer ready ({len(result['answer'])} chars) | sources: {result['sources']}")
 
     return jsonify({
         "answer":   result["answer"],
@@ -131,6 +154,20 @@ async def query():
     }), 200
 
 
+# ── 404 handler ────────────────────────────────────────────────────────────────
+
+@app.errorhandler(404)
+async def not_found(e):
+    return jsonify({"error": "Endpoint not found."}), 404
+
+
+# ── 405 handler ────────────────────────────────────────────────────────────────
+
+@app.errorhandler(405)
+async def method_not_allowed(e):
+    return jsonify({"error": "Method not allowed."}), 405
+
+
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -138,6 +175,4 @@ if __name__ == "__main__":
     log.info("Endpoints:")
     log.info("  GET  http://localhost:5000/api/health")
     log.info("  POST http://localhost:5000/api/query")
-
-    # debug=False in production, but True here gives auto-reload on file save
     app.run(host="0.0.0.0", port=5000, debug=True)
