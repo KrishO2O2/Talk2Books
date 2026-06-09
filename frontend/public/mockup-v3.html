@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Talk2Books — AI-Powered Document Reader</title>
+  <meta name="description" content="Talk2Books: Converse with your books using AI. Upload any document and ask it anything." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            serif: ['"DM Serif Display"', 'Georgia', 'serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          borderRadius: {
+            '4xl': '28px',
+            '5xl': '32px',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body { background: #F5F3EF; font-family: 'Inter', system-ui, sans-serif; color: #1a1a1a; overflow-x: hidden; }
+
+    ::selection { background: rgba(99,102,241,0.15); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 99px; }
+
+    /* ═══════ ANIMATIONS ═══════ */
+
+    @keyframes slideUpFade {
+      0%   { opacity: 0; transform: translateY(32px) scale(0.97); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .reveal {
+      opacity: 0;
+      animation: slideUpFade 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes clipUp {
+      0%   { transform: translateY(110%); }
+      100% { transform: translateY(0%); }
+    }
+    .kinetic-wrap { overflow: hidden; display: inline-block; vertical-align: bottom; }
+    .kinetic-inner {
+      display: inline-block;
+      transform: translateY(110%);
+      animation: clipUp 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes fadeUp {
+      0%   { opacity: 0; transform: translateY(6px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .word-anim {
+      display: inline-block;
+      opacity: 0;
+      animation: fadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
+    }
+    .float-sm { animation: float 5s ease-in-out infinite; }
+
+    @keyframes pulse-ring {
+      0%   { transform: scale(1); opacity: 1; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+
+    @keyframes spin-slow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .spin-slow { animation: spin-slow 12s linear infinite; }
+
+    /* Card hover lifts */
+    .card-hover { transition: transform 0.5s cubic-bezier(0.22,1,0.36,1), box-shadow 0.5s ease; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0,0,0,0.08); }
+
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Dot grid pattern */
+    .dot-grid {
+      background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    /* Glass effect for light mode */
+    .glass-light {
+      background: rgba(255,255,255,0.6);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    /* ── Icon Bridge ── */
+    function Icon({ name, size = 18, className = '', sw = 1.5 }) {
+      const r = useRef(null);
+      useEffect(() => {
+        if (r.current && lucide.icons[name]) {
+          r.current.innerHTML = '';
+          const s = lucide.createElement(lucide.icons[name]);
+          s.setAttribute('width', size);
+          s.setAttribute('height', size);
+          s.setAttribute('stroke-width', sw);
+          if (className) s.setAttribute('class', className);
+          r.current.appendChild(s);
+        }
+      }, [name, size, className, sw]);
+      return <span ref={r} className="inline-flex items-center justify-center" />;
+    }
+
+    /* ── Kinetic Text ── */
+    function K({ children, delay = 0 }) {
+      return (
+        <span className="kinetic-wrap">
+          <span className="kinetic-inner" style={{ animationDelay: `${delay}s` }}>{children}</span>
+        </span>
+      );
+    }
+
+    /* ── Word Animate ── */
+    function WordAnim({ text, base = 0 }) {
+      return <>{text.split(' ').map((w, i) => <span key={i}><span className="word-anim" style={{ animationDelay: `${base + i * 0.035}s` }}>{w}</span>{' '}</span>)}</>;
+    }
+
+    /* ═══════════════════════════════════════
+       HERO CARD — Big title + tagline
+       ═══════════════════════════════════════ */
+    function HeroCard() {
+      return (
+        <div className="reveal bg-white rounded-5xl p-10 md:p-12 card-hover relative overflow-hidden col-span-7 row-span-2" style={{ animationDelay: '0.1s' }}>
+          {/* Subtle dot-grid background */}
+          <div className="absolute inset-0 dot-grid opacity-40 pointer-events-none" />
+
+          {/* Floating emoji accents */}
+          <div className="absolute top-8 right-10 text-4xl float-sm" style={{ animationDelay: '0.5s' }}>📖</div>
+          <div className="absolute top-24 right-28 text-2xl float-sm" style={{ animationDelay: '1.2s' }}>✨</div>
+          <div className="absolute bottom-12 right-16 text-3xl float-sm" style={{ animationDelay: '0.8s' }}>🤖</div>
+
+          <div className="relative z-10">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 mb-8">
+              <div className="relative">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <div className="absolute inset-0 w-2 h-2 rounded-full bg-emerald-400" style={{ animation: 'pulse-ring 2s ease-out infinite' }} />
+              </div>
+              <span className="text-[11px] font-semibold text-indigo-600 tracking-wide">AI-Powered RAG Reader</span>
+            </div>
+
+            {/* Title */}
+            <h1 className="font-serif leading-[1.05] mb-6" style={{ fontSize: 'clamp(40px, 5vw, 72px)' }}>
+              <K delay={0.2}>Making it easier</K><br />
+              <K delay={0.3}>to </K>
+              <K delay={0.38}><span className="gradient-text">talk to</span></K>
+              <K delay={0.46}> your</K><br />
+              <K delay={0.54}>books</K>
+            </h1>
+
+            {/* Subtitle */}
+            <p className="text-gray-400 text-[15px] leading-relaxed max-w-md font-normal">
+              Upload any document. Ask questions in natural language. Get intelligent, source-cited answers powered by AI.
+            </p>
+
+            {/* CTA */}
+            <div className="mt-10 flex items-center gap-4">
+              <button className="h-12 px-7 rounded-2xl bg-[#1a1a1a] text-white text-[13px] font-semibold flex items-center gap-2.5 hover:bg-[#333] transition-colors duration-300">
+                <Icon name="upload" size={15} className="text-white" sw={2} />
+                Upload a Book
+              </button>
+              <button className="h-12 px-7 rounded-2xl bg-transparent border border-gray-200 text-gray-600 text-[13px] font-semibold flex items-center gap-2.5 hover:bg-gray-50 transition-colors duration-300">
+                <Icon name="play" size={15} className="text-gray-500" sw={2} />
+                Watch Demo
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       CHAT PREVIEW CARD — Live conversation
+       ═══════════════════════════════════════ */
+    function ChatPreviewCard() {
+      return (
+        <div className="reveal bg-[#1a1a1a] rounded-5xl p-8 card-hover col-span-5 row-span-2 relative overflow-hidden" style={{ animationDelay: '0.2s' }}>
+          {/* Corner gradient accent */}
+          <div className="absolute top-0 right-0 w-48 h-48 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle at top right, rgba(99,102,241,0.15) 0%, transparent 70%)' }} />
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                <Icon name="message-square" size={14} className="text-indigo-400" sw={2} />
+              </div>
+              <span className="text-white/40 text-[11px] font-semibold tracking-wider uppercase">Live Chat</span>
+            </div>
+            <div className="flex gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-white/10" />
+              <div className="w-3 h-3 rounded-full bg-white/10" />
+              <div className="w-3 h-3 rounded-full bg-white/10" />
+            </div>
+          </div>
+
+          {/* User message */}
+          <div className="mb-5">
+            <div className="inline-block bg-indigo-500 text-white text-[13px] leading-relaxed rounded-2xl rounded-br-lg px-5 py-3 max-w-[90%]">
+              How does the book describe the relationship between attention and memory?
+            </div>
+          </div>
+
+          {/* AI response */}
+          <div className="flex gap-3 mb-5">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center shrink-0 mt-1">
+              <Icon name="sparkles" size={11} className="text-white" sw={2} />
+            </div>
+            <div>
+              <p className="text-white/70 text-[13px] leading-[1.7]">
+                <WordAnim text={'The text positions attention as the indispensable bridge between perception and lasting memory. Drawing on Chapter III, the author argues that memory is not passive recording but active reconstruction.'} base={0.8} />
+              </p>
+              {/* Source pills */}
+              <div className="flex items-center gap-2 mt-3">
+                {['Ch.3, p.47', 'Ch.8, p.203'].map((s, i) => (
+                  <span key={i} className="text-[9px] font-mono text-indigo-300/60 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/10">{s}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Input */}
+          <div className="absolute bottom-6 left-6 right-6 rounded-2xl bg-white/[0.06] border border-white/[0.08] px-4 py-3 flex items-center gap-3">
+            <Icon name="search" size={14} className="text-white/20" sw={1.5} />
+            <span className="text-white/20 text-[13px]">Ask your document…</span>
+            <div className="ml-auto w-7 h-7 rounded-xl bg-indigo-500 flex items-center justify-center">
+              <Icon name="arrow-up" size={13} className="text-white" sw={2.5} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       CONTEXT VIEWER CARD
+       ═══════════════════════════════════════ */
+    function ContextCard() {
+      return (
+        <div className="reveal bg-white rounded-5xl p-8 card-hover col-span-5 relative overflow-hidden" style={{ animationDelay: '0.3s' }}>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+              <Icon name="book-open" size={18} className="text-amber-600" sw={1.5} />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-gray-900">Context Viewer</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">3 passages retrieved from source</p>
+            </div>
+          </div>
+
+          {/* Active passage */}
+          <div className="relative pl-4 border-l-[3px] border-indigo-400 mb-5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[9px] font-mono font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md tracking-wide">CHUNK_01</span>
+              <span className="text-[9px] font-mono text-gray-400">Ch. III · p. 47</span>
+              <span className="ml-auto text-[9px] font-mono font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-md">94%</span>
+            </div>
+            <h4 className="text-[14px] font-bold text-gray-900 mb-1.5">The Architecture of Memory</h4>
+            <p className="text-[12.5px] text-gray-500 leading-[1.7] font-serif italic">
+              Human memory does not function like a filing cabinet. Instead, it is a fluid, reconstructive process…
+            </p>
+          </div>
+
+          {/* Faded passages */}
+          <div className="relative pl-4 border-l-[3px] border-gray-100 mb-4 opacity-50">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[9px] font-mono font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md tracking-wide">CHUNK_02</span>
+              <span className="text-[9px] font-mono text-gray-300">Ch. V · p. 112</span>
+              <span className="ml-auto text-[9px] font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">87%</span>
+            </div>
+            <h4 className="text-[13px] font-semibold text-gray-600">Distributed Representations</h4>
+          </div>
+
+          <div className="relative pl-4 border-l-[3px] border-gray-100 opacity-35">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[9px] font-mono font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md tracking-wide">CHUNK_03</span>
+              <span className="text-[9px] font-mono text-gray-300">Ch. VIII · p. 203</span>
+              <span className="ml-auto text-[9px] font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">79%</span>
+            </div>
+            <h4 className="text-[13px] font-semibold text-gray-600">Attention & Binding</h4>
+          </div>
+
+          {/* Bottom stat */}
+          <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+            <span className="text-[10px] text-gray-300 font-mono">1,847 vector chunks indexed</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] text-emerald-500 font-mono font-semibold">Active</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       FEATURES SHOWCASE — Stacked cards
+       ═══════════════════════════════════════ */
+    function FeatureStack() {
+      return (
+        <div className="reveal col-span-4 flex flex-col gap-4" style={{ animationDelay: '0.35s' }}>
+          {/* Upload feature */}
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-5xl p-7 card-hover relative overflow-hidden flex-1">
+            <div className="absolute -bottom-6 -right-6 w-32 h-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+            <div className="relative z-10">
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center mb-4">
+                <Icon name="file-up" size={18} className="text-white" sw={2} />
+              </div>
+              <h3 className="text-white text-[17px] font-bold mb-1.5">Drop any document</h3>
+              <p className="text-white/60 text-[12px] leading-relaxed">PDF, EPUB, TXT — we'll chunk, embed, and index it in seconds.</p>
+              {/* File pills */}
+              <div className="flex gap-2 mt-4">
+                {['.pdf', '.epub', '.txt', '.md'].map((ext, i) => (
+                  <span key={i} className="text-[10px] font-mono font-bold text-white/80 bg-white/15 px-2.5 py-1 rounded-lg">{ext}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* RAG Pipeline */}
+          <div className="bg-white rounded-5xl p-7 card-hover relative overflow-hidden flex-1">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+                <Icon name="workflow" size={18} className="text-orange-500" sw={1.5} />
+              </div>
+              <div>
+                <h3 className="text-[15px] font-bold text-gray-900">RAG Pipeline</h3>
+                <p className="text-[11px] text-gray-400">Retrieval → Augmentation → Generation</p>
+              </div>
+            </div>
+            {/* Pipeline steps */}
+            <div className="flex items-center gap-2">
+              {['Embed', 'Retrieve', 'Rerank', 'Generate'].map((step, i) => (
+                <React.Fragment key={i}>
+                  <div className={`px-3 py-1.5 rounded-xl text-[10px] font-bold tracking-wide ${
+                    i === 3 ? 'bg-indigo-500 text-white' : 'bg-gray-50 border border-gray-100 text-gray-500'
+                  }`}>{step}</div>
+                  {i < 3 && <Icon name="chevron-right" size={12} className="text-gray-200" sw={2} />}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       ACTIVE DOCUMENT CARD
+       ═══════════════════════════════════════ */
+    function DocumentCard() {
+      return (
+        <div className="reveal bg-white rounded-5xl p-7 card-hover col-span-3 relative overflow-hidden" style={{ animationDelay: '0.4s' }}>
+          {/* Book cover preview */}
+          <div className="w-full aspect-[3/4] rounded-2xl bg-gradient-to-br from-gray-900 via-gray-800 to-indigo-900 mb-5 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+            {/* Noise texture */}
+            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'256\' height=\'256\' filter=\'url(%23noise)\' opacity=\'0.4\'/%3E%3C/svg%3E")' }} />
+            <div className="relative z-10 text-center">
+              <div className="w-8 h-[1px] bg-white/30 mx-auto mb-4" />
+              <h4 className="font-serif text-white text-[18px] leading-snug mb-2">Cognitive<br />Architectures</h4>
+              <p className="text-white/40 text-[10px] font-mono tracking-widest uppercase">A Modern Survey</p>
+              <div className="w-8 h-[1px] bg-white/30 mx-auto mt-4" />
+            </div>
+          </div>
+
+          <h3 className="text-[14px] font-bold text-gray-900 mb-1">Cognitive Architectures</h3>
+          <p className="text-[11px] text-gray-400 mb-4">342 pages · PDF · Uploaded 2h ago</p>
+
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500" style={{ width: '100%' }} />
+            </div>
+            <span className="text-[10px] font-mono font-bold text-emerald-500">Indexed</span>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       TELEMETRY PILLS — Small bottom cards
+       ═══════════════════════════════════════ */
+    function TelemetryPill({ icon, label, value, color, delay }) {
+      const colors = {
+        indigo: { bg: 'bg-indigo-50', border: 'border-indigo-100', icon: 'text-indigo-500', text: 'text-indigo-600' },
+        emerald: { bg: 'bg-emerald-50', border: 'border-emerald-100', icon: 'text-emerald-500', text: 'text-emerald-600' },
+        amber: { bg: 'bg-amber-50', border: 'border-amber-100', icon: 'text-amber-500', text: 'text-amber-600' },
+        gray: { bg: 'bg-gray-50', border: 'border-gray-100', icon: 'text-gray-500', text: 'text-gray-600' },
+      };
+      const c = colors[color] || colors.gray;
+      return (
+        <div className={`reveal bg-white rounded-3xl p-5 card-hover col-span-3`} style={{ animationDelay: `${delay}s` }}>
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-2xl ${c.bg} border ${c.border} flex items-center justify-center`}>
+              <Icon name={icon} size={17} className={c.icon} sw={1.5} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-mono text-gray-300 tracking-wider uppercase">{label}</p>
+              <p className={`text-[14px] font-bold ${c.text} truncate`}>{value}</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${color === 'emerald' ? 'bg-emerald-400' : color === 'indigo' ? 'bg-indigo-400' : color === 'amber' ? 'bg-amber-400' : 'bg-gray-300'}`} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       APP
+       ═══════════════════════════════════════ */
+    function App() {
+      return (
+        <div className="min-h-screen bg-[#F5F3EF]">
+          {/* ══════ NAV ══════ */}
+          <nav className="reveal sticky top-0 z-50 mx-4 mt-4" style={{ animationDelay: '0s' }}>
+            <div className="glass-light rounded-full border border-white/60 shadow-sm px-5 py-2.5 flex items-center justify-between max-w-7xl mx-auto">
+              {/* Logo */}
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#1a1a1a] flex items-center justify-center">
+                  <Icon name="book-open-check" size={15} className="text-white" sw={2} />
+                </div>
+                <span className="text-[15px] font-bold tracking-tight text-gray-900">
+                  Talk<span className="gradient-text">2</span>Books
+                </span>
+              </div>
+
+              {/* Center links */}
+              <div className="flex items-center gap-1">
+                {['Home', 'Library', 'About'].map((l, i) => (
+                  <button key={i} className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors duration-300 ${
+                    i === 0 ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                  }`}>{l}</button>
+                ))}
+              </div>
+
+              {/* Right actions */}
+              <div className="flex items-center gap-2.5">
+                <button className="h-9 px-5 rounded-full bg-[#1a1a1a] text-white text-[12px] font-semibold flex items-center gap-2 hover:bg-[#333] transition-colors duration-300">
+                  <Icon name="plus" size={14} className="text-white" sw={2.5} />
+                  New Chat
+                </button>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
+                  <span className="text-white text-[11px] font-bold">K</span>
+                </div>
+              </div>
+            </div>
+          </nav>
+
+          {/* ══════ BENTO GRID ══════ */}
+          <main className="max-w-7xl mx-auto px-4 pt-6 pb-8">
+            {/* Row 1: Hero (7) + Chat Preview (5) */}
+            <div className="grid grid-cols-12 gap-4 mb-4">
+              <HeroCard />
+              <ChatPreviewCard />
+            </div>
+
+            {/* Row 2: Context (5) + Features (4) + Document (3) */}
+            <div className="grid grid-cols-12 gap-4 mb-4">
+              <ContextCard />
+              <FeatureStack />
+              <DocumentCard />
+            </div>
+
+            {/* Row 3: Telemetry pills */}
+            <div className="grid grid-cols-12 gap-4">
+              <TelemetryPill icon="cpu" label="Model" value="phi4-mini" color="indigo" delay={0.5} />
+              <TelemetryPill icon="database" label="Vector DB" value="Qdrant" color="emerald" delay={0.55} />
+              <TelemetryPill icon="binary" label="Embeddings" value="all-MiniLM-L6" color="amber" delay={0.6} />
+              <div className="reveal col-span-3 bg-white rounded-3xl p-5 card-hover flex items-center gap-3" style={{ animationDelay: '0.65s' }}>
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center">
+                  <Icon name="gauge" size={17} className="text-rose-500" sw={1.5} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[10px] font-mono text-gray-300 tracking-wider uppercase">Latency</p>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-[22px] font-bold text-gray-900 leading-none">142</span>
+                    <span className="text-[11px] font-mono text-gray-300">ms</span>
+                  </div>
+                </div>
+                <div className="w-12 h-12 relative">
+                  <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
+                    <circle cx="24" cy="24" r="20" fill="none" stroke="#f5f3ef" strokeWidth="3" />
+                    <circle cx="24" cy="24" r="20" fill="none" stroke="url(#grad)" strokeWidth="3" strokeDasharray="126" strokeDashoffset="40" strokeLinecap="round" />
+                    <defs>
+                      <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#f43f5e" />
+                        <stop offset="100%" stopColor="#fb923c" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          {/* ══════ FOOTER ══════ */}
+          <footer className="reveal max-w-7xl mx-auto px-4 pb-6 pt-2" style={{ animationDelay: '0.7s' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-300 font-mono">© 2024 Talk2Books</span>
+              <div className="flex items-center gap-4">
+                {['Privacy', 'Terms', 'GitHub'].map((l, i) => (
+                  <span key={i} className="text-[10px] text-gray-300 font-mono hover:text-gray-500 cursor-pointer transition-colors">{l}</span>
+                ))}
+              </div>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

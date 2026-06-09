@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Talk2Books — AI Document Intelligence</title>
+  <meta name="description" content="A local, multilingual RAG pipeline for semantic document understanding. Ask questions, extract citations — all running privately on your machine." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['"Playfair Display"', 'Georgia', 'serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            canvas: '#0C0A09',
+            surface: '#171412',
+            surfaceLight: '#1E1B18',
+            gold: {
+              50: '#FDF8EF',
+              100: '#F5E6C8',
+              200: '#E8CFA0',
+              300: '#D4AD6A',
+              400: '#C49A4E',
+              500: '#B8860B',
+              600: '#96700A',
+              DEFAULT: '#C49A4E',
+            },
+            warm: {
+              50: 'rgba(255,255,255,0.03)',
+              100: 'rgba(255,255,255,0.06)',
+              200: 'rgba(255,255,255,0.1)',
+              300: 'rgba(255,255,255,0.15)',
+              400: 'rgba(255,255,255,0.25)',
+              500: 'rgba(255,255,255,0.4)',
+              600: 'rgba(255,255,255,0.6)',
+              700: 'rgba(255,255,255,0.8)',
+            },
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; scroll-behavior: smooth; }
+    body { background: #0C0A09; color: #fff; font-family: 'Inter', system-ui, sans-serif; overflow-x: hidden; }
+    ::selection { background: rgba(196,154,78,0.25); color: #fff; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+
+    /* ═══════ KEYFRAMES ═══════ */
+
+    @keyframes slideUpFade {
+      0%   { opacity: 0; transform: translateY(36px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .reveal {
+      opacity: 0;
+      animation: slideUpFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes clipUp {
+      0%   { transform: translateY(115%); }
+      100% { transform: translateY(0%); }
+    }
+    .k-wrap { overflow: hidden; display: inline-block; vertical-align: bottom; }
+    .k-inner {
+      display: inline-block;
+      transform: translateY(115%);
+      animation: clipUp 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes fadeWord {
+      0%   { opacity: 0; transform: translateY(5px); filter: blur(2px); }
+      100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    .w-anim { display: inline-block; opacity: 0; animation: fadeWord 0.4s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+    @keyframes marquee {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .marquee-track { animation: marquee 25s linear infinite; }
+    .marquee-track:hover { animation-play-state: paused; }
+
+    @keyframes dotFade {
+      0%, 100% { opacity: 0.15; }
+      50%      { opacity: 0.45; }
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.3; }
+      50%      { opacity: 0.7; }
+    }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    .blink { animation: blink 1.1s step-end infinite; }
+
+    @keyframes lineGrow {
+      0%   { transform: scaleX(0); }
+      100% { transform: scaleX(1); }
+    }
+    .line-grow { transform-origin: left; animation: lineGrow 1s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+    @keyframes spin-slow { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+    .spin-slow { animation: spin-slow 20s linear infinite; }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-8px); }
+    }
+    .float { animation: float 6s ease-in-out infinite; }
+
+    /* Dot grid */
+    .dot-grid {
+      background-image: radial-gradient(circle, rgba(196,154,78,0.12) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    /* Tab active indicator */
+    .tab-active { position: relative; }
+    .tab-active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px; left: 0; right: 0;
+      height: 2px;
+      background: #C49A4E;
+      border-radius: 1px;
+    }
+
+    /* Gradient border trick */
+    .gradient-border {
+      position: relative;
+    }
+    .gradient-border::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(196,154,78,0.3), rgba(196,154,78,0.05), rgba(196,154,78,0.15));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* Noise texture overlay */
+    .noise::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.025;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    /* ── Icon Bridge ── */
+    function Icon({ name, size = 16, className = '', sw = 1.5 }) {
+      const r = useRef(null);
+      useEffect(() => {
+        if (r.current && lucide.icons[name]) {
+          r.current.innerHTML = '';
+          const s = lucide.createElement(lucide.icons[name]);
+          s.setAttribute('width', size);
+          s.setAttribute('height', size);
+          s.setAttribute('stroke-width', sw);
+          if (className) s.setAttribute('class', className);
+          r.current.appendChild(s);
+        }
+      }, [name, size, className, sw]);
+      return <span ref={r} className="inline-flex items-center justify-center" />;
+    }
+
+    function K({ children, delay = 0 }) {
+      return <span className="k-wrap"><span className="k-inner" style={{ animationDelay: `${delay}s` }}>{children}</span></span>;
+    }
+
+    function WA({ text, base = 0 }) {
+      return <>{text.split(' ').map((w, i) => <span key={i}><span className="w-anim" style={{ animationDelay: `${base + i * 0.03}s` }}>{w}</span>{' '}</span>)}</>;
+    }
+
+    /* ══════════════════════════════════
+       LANDING PAGE VIEW
+       ══════════════════════════════════ */
+    function LandingPage() {
+      return (
+        <>
+          {/* ─── HERO ─── */}
+          <section className="relative px-6 md:px-12 lg:px-20 pt-16 pb-8 min-h-[85vh] flex items-center">
+            {/* Dot grid right side */}
+            <div className="absolute top-16 right-12 w-[300px] h-[500px] dot-grid opacity-60 pointer-events-none reveal" style={{ animationDelay: '0.8s' }} />
+
+            {/* Vertical rotated text */}
+            <div
+              className="reveal absolute right-10 top-1/2 -translate-y-1/2 pointer-events-none hidden lg:block"
+              style={{ animationDelay: '1s', writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+            >
+              <span className="font-mono text-[10px] tracking-[0.5em] uppercase text-white/10">
+                Local · Private · Multilingual
+              </span>
+            </div>
+
+            {/* Ambient glow */}
+            <div className="absolute top-0 left-[20%] w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(196,154,78,0.04) 0%, transparent 70%)' }} />
+
+            <div className="relative z-10 max-w-3xl">
+              {/* Badge */}
+              <div className="reveal flex items-center gap-3 mb-10" style={{ animationDelay: '0.15s' }}>
+                <div className="w-1.5 h-1.5 rounded-full bg-gold-400" style={{ animation: 'glowPulse 2s ease-in-out infinite' }} />
+                <span className="font-mono text-[10px] tracking-[0.4em] uppercase text-gold-400/70">Document Intelligence System</span>
+                <div className="h-[1px] w-16 bg-gold-400/20 line-grow" style={{ animationDelay: '0.5s' }} />
+              </div>
+
+              {/* Title */}
+              <h1 className="font-serif leading-[1.0] mb-8" style={{ fontSize: 'clamp(52px, 7vw, 96px)' }}>
+                <K delay={0.2}><span className="text-white">Talk to</span></K><br />
+                <K delay={0.35}><span className="text-white">your </span></K>
+                <K delay={0.48}><span className="text-gold-400 italic">Books.</span></K>
+              </h1>
+
+              {/* Description */}
+              <p className="reveal text-[15px] leading-[1.8] text-white/35 max-w-lg mb-10 font-light" style={{ animationDelay: '0.6s' }}>
+                A local, multilingual RAG pipeline for semantic document understanding. Ask questions, extract citations — all running privately on your machine.
+              </p>
+
+              {/* CTAs */}
+              <div className="reveal flex items-center gap-4" style={{ animationDelay: '0.7s' }}>
+                <button className="h-12 px-8 rounded-xl bg-gold-400 text-canvas text-[12px] font-bold tracking-[0.15em] uppercase flex items-center gap-2.5 hover:bg-gold-300 transition-all duration-500 hover:shadow-lg hover:shadow-gold-400/10">
+                  <Icon name="library" size={14} className="text-canvas" sw={2} />
+                  Open Library
+                </button>
+                <button className="group h-12 px-8 rounded-xl bg-transparent border border-white/10 text-white/50 text-[12px] font-medium tracking-[0.1em] uppercase flex items-center gap-2.5 hover:border-white/20 hover:text-white/70 transition-all duration-500">
+                  View Docs
+                  <Icon name="arrow-right" size={14} className="text-white/30 group-hover:text-white/60 transition-colors group-hover:translate-x-0.5 transition-transform duration-300" sw={1.5} />
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* ─── MARQUEE ─── */}
+          <div className="reveal relative overflow-hidden border-t border-b border-white/[0.04] py-4 mb-20" style={{ animationDelay: '0.85s' }}>
+            <div className="flex whitespace-nowrap marquee-track">
+              {[...Array(2)].map((_, rep) => (
+                <div key={rep} className="flex items-center shrink-0">
+                  {['Semantic Search', 'Citation Extraction', 'Multilingual', 'Privacy First', 'Local-Only', 'RAG Pipeline', 'Vector Embeddings', 'PDF · EPUB · TXT'].map((item, i) => (
+                    <React.Fragment key={i}>
+                      <span className="font-mono text-[11px] tracking-[0.25em] uppercase text-white/15 px-6">{item}</span>
+                      <span className="text-gold-400/30 text-[8px]">✦</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ─── FEATURES BENTO ─── */}
+          <section className="px-6 md:px-12 lg:px-20 mb-24">
+            <div className="reveal mb-12" style={{ animationDelay: '0.2s' }}>
+              <span className="font-mono text-[10px] tracking-[0.4em] uppercase text-gold-400/50">How it works</span>
+            </div>
+
+            <div className="grid grid-cols-12 gap-4">
+              {/* Upload Card — Large */}
+              <div className="reveal col-span-7 bg-surface rounded-3xl p-10 relative overflow-hidden gradient-border noise card-hover group" style={{ animationDelay: '0.25s' }}>
+                <div className="relative z-10">
+                  <div className="w-12 h-12 rounded-2xl bg-gold-400/10 border border-gold-400/10 flex items-center justify-center mb-6 group-hover:bg-gold-400/15 transition-colors duration-500">
+                    <Icon name="file-up" size={20} className="text-gold-400" sw={1.5} />
+                  </div>
+                  <h3 className="font-serif text-[28px] text-white mb-3">Drop any document</h3>
+                  <p className="text-white/30 text-[14px] leading-relaxed max-w-md mb-8">Upload PDFs, EPUBs, or plain text. We chunk it, embed it with state-of-the-art models, and index everything locally.</p>
+                  <div className="flex gap-3">
+                    {['.pdf', '.epub', '.txt', '.md', '.docx'].map((ext, i) => (
+                      <span key={i} className="text-[10px] font-mono font-medium text-gold-400/50 bg-gold-400/5 border border-gold-400/10 px-3 py-1.5 rounded-lg hover:bg-gold-400/10 hover:text-gold-400/80 transition-all duration-300 cursor-default">{ext}</span>
+                    ))}
+                  </div>
+                </div>
+                {/* Decorative element */}
+                <div className="absolute bottom-0 right-0 w-48 h-48 pointer-events-none opacity-20">
+                  <div className="absolute bottom-8 right-8 w-32 h-40 rounded-xl border border-gold-400/20 group-hover:border-gold-400/30 transition-colors duration-700" />
+                  <div className="absolute bottom-12 right-12 w-32 h-40 rounded-xl border border-gold-400/10" />
+                  <div className="absolute bottom-16 right-16 w-32 h-40 rounded-xl border border-gold-400/5" />
+                </div>
+              </div>
+
+              {/* Ask Card */}
+              <div className="reveal col-span-5 bg-surface rounded-3xl p-10 relative overflow-hidden gradient-border noise" style={{ animationDelay: '0.35s' }}>
+                <div className="relative z-10">
+                  <div className="w-12 h-12 rounded-2xl bg-gold-400/10 border border-gold-400/10 flex items-center justify-center mb-6">
+                    <Icon name="message-circle" size={20} className="text-gold-400" sw={1.5} />
+                  </div>
+                  <h3 className="font-serif text-[28px] text-white mb-3">Ask anything</h3>
+                  <p className="text-white/30 text-[14px] leading-relaxed mb-6">Natural language queries against your entire library. Get precise, cited answers — not hallucinations.</p>
+                  {/* Mini chat preview */}
+                  <div className="bg-canvas/50 rounded-2xl p-4 border border-white/[0.04]">
+                    <div className="flex items-start gap-2.5 mb-3">
+                      <div className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <Icon name="user" size={10} className="text-white/40" sw={2} />
+                      </div>
+                      <p className="text-white/40 text-[12px] leading-relaxed">What does Chapter 3 say about memory?</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-5 h-5 rounded-md bg-gold-400/15 flex items-center justify-center shrink-0 mt-0.5">
+                        <Icon name="sparkles" size={10} className="text-gold-400" sw={2} />
+                      </div>
+                      <div>
+                        <p className="text-white/30 text-[12px] leading-relaxed">The author describes memory as a fluid, reconstructive process…</p>
+                        <span className="text-[9px] font-mono text-gold-400/40 mt-1 inline-block">p.47 · 94% confidence</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Privacy Card */}
+              <div className="reveal col-span-4 bg-surface rounded-3xl p-8 relative overflow-hidden gradient-border noise" style={{ animationDelay: '0.4s' }}>
+                <div className="relative z-10">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/10 flex items-center justify-center mb-5">
+                    <Icon name="shield-check" size={20} className="text-emerald-400" sw={1.5} />
+                  </div>
+                  <h3 className="font-serif text-[22px] text-white mb-2">100% Private</h3>
+                  <p className="text-white/30 text-[13px] leading-relaxed">Your data never leaves your machine. Local models, local embeddings, local vector store. Zero telemetry.</p>
+                </div>
+              </div>
+
+              {/* Tech Stack Card */}
+              <div className="reveal col-span-4 bg-surface rounded-3xl p-8 relative overflow-hidden gradient-border noise" style={{ animationDelay: '0.45s' }}>
+                <div className="relative z-10">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/10 flex items-center justify-center mb-5">
+                    <Icon name="boxes" size={20} className="text-blue-400" sw={1.5} />
+                  </div>
+                  <h3 className="font-serif text-[22px] text-white mb-2">Modern Stack</h3>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {['phi4-mini', 'Qdrant', 'all-MiniLM-L6', 'FastAPI', 'React'].map((t, i) => (
+                      <span key={i} className="text-[10px] font-mono text-white/30 bg-white/[0.03] border border-white/[0.05] px-2.5 py-1 rounded-lg">{t}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Multilingual Card */}
+              <div className="reveal col-span-4 bg-surface rounded-3xl p-8 relative overflow-hidden gradient-border noise" style={{ animationDelay: '0.5s' }}>
+                <div className="relative z-10">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/10 flex items-center justify-center mb-5">
+                    <Icon name="languages" size={20} className="text-purple-400" sw={1.5} />
+                  </div>
+                  <h3 className="font-serif text-[22px] text-white mb-2">Multilingual</h3>
+                  <p className="text-white/25 text-[13px] leading-relaxed">Ask questions in any language. The semantic search works across linguistic boundaries.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </>
+      );
+    }
+
+    /* ══════════════════════════════════
+       APP INTERFACE VIEW
+       ══════════════════════════════════ */
+    function AppInterface() {
+      const passages = [
+        { id: '01', ch: 'III', page: 47, conf: 94, title: 'The Architecture of Memory', body: 'Human memory does not function like a filing cabinet. Instead, it is a fluid, reconstructive process. Each time we recall an event, we do not simply retrieve a stored record — rather, we actively rebuild the memory from scattered neural traces, influenced by our current state of mind.', active: true },
+        { id: '02', ch: 'V', page: 112, conf: 87, title: 'Distributed Representations', body: 'The concept of distributed representation stands as one of the most profound insights in modern cognitive science. Unlike localist schemes, distributed representations spread meaning across many units.', active: false },
+        { id: '03', ch: 'VIII', page: 203, conf: 79, title: 'Attention & Binding', body: 'Attention serves as the binding mechanism of conscious experience. Without it, the parallel streams of processing remain forever disjointed.', active: false },
+      ];
+
+      return (
+        <section className="px-6 md:px-12 lg:px-20 pb-12">
+          <div className="bg-surface rounded-3xl border border-white/[0.04] overflow-hidden noise relative" style={{ minHeight: '75vh' }}>
+            {/* App Top Bar */}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-white/[0.06] hover:bg-red-400/60 transition-colors cursor-pointer" />
+                  <div className="w-3 h-3 rounded-full bg-white/[0.06] hover:bg-yellow-400/60 transition-colors cursor-pointer" />
+                  <div className="w-3 h-3 rounded-full bg-white/[0.06] hover:bg-green-400/60 transition-colors cursor-pointer" />
+                </div>
+                <div className="h-4 w-[1px] bg-white/[0.04]" />
+                <span className="text-[11px] text-white/20 font-mono">Talk2Books</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-[10px] font-mono text-gold-400/30 bg-gold-400/5 px-2.5 py-1 rounded-md border border-gold-400/10">cognitive_architectures.pdf</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span className="text-[10px] font-mono text-white/20">phi4-mini</span>
+                </div>
+              </div>
+            </div>
+
+            {/* App Content — Two Panes */}
+            <div className="grid grid-cols-12 relative" style={{ minHeight: '68vh' }}>
+              {/* Left: Context Viewer */}
+              <div className="col-span-5 border-r border-white/[0.04] p-8 overflow-y-auto" style={{ maxHeight: '68vh' }}>
+                <div className="reveal flex items-center gap-3 mb-8" style={{ animationDelay: '0.1s' }}>
+                  <Icon name="book-open" size={14} className="text-gold-400/50" sw={1.5} />
+                  <span className="font-mono text-[9px] tracking-[0.35em] uppercase text-white/20">Retrieved Context</span>
+                  <div className="flex-1 h-[1px] bg-white/[0.03]" />
+                  <span className="font-mono text-[9px] text-white/15">{passages.length} passages</span>
+                </div>
+
+                <div className="space-y-8">
+                  {passages.map((p, i) => (
+                    <div key={p.id} className={`reveal relative group cursor-pointer`} style={{ animationDelay: `${0.2 + i * 0.1}s` }}>
+                      <div className={`absolute left-0 top-0 bottom-0 w-[2px] rounded-full transition-colors duration-500 ${
+                        p.active ? 'bg-gradient-to-b from-gold-400 via-gold-400/50 to-transparent' : 'bg-white/[0.04] group-hover:bg-white/[0.08]'
+                      }`} />
+                      <div className="pl-5">
+                        <div className="flex items-center gap-3 mb-2.5">
+                          <span className={`text-[9px] font-mono tracking-[0.2em] uppercase ${p.active ? 'text-gold-400/60' : 'text-white/12'}`}>
+                            Chunk_{p.id} // Ch. {p.ch} · p. {p.page}
+                          </span>
+                          <span className={`ml-auto text-[9px] font-mono font-medium px-2 py-0.5 rounded-md ${
+                            p.active ? 'text-gold-400 bg-gold-400/10' : 'text-white/15 bg-white/[0.02]'
+                          }`}>{p.conf}%</span>
+                        </div>
+                        <h4 className={`font-serif text-[17px] mb-2 transition-colors duration-500 ${
+                          p.active ? 'text-white' : 'text-white/25 group-hover:text-white/40'
+                        }`}>{p.title}</h4>
+                        <p className={`font-serif text-[13px] leading-[1.8] italic transition-colors duration-500 ${
+                          p.active ? 'text-white/40' : 'text-white/12 group-hover:text-white/20'
+                        }`}>{p.body}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Bottom stat */}
+                <div className="mt-10 pt-4 border-t border-white/[0.03] flex items-center gap-3">
+                  <Icon name="layers" size={11} className="text-white/10" sw={1.5} />
+                  <span className="text-[9px] font-mono text-white/10">1,847 vectors indexed · Qdrant</span>
+                </div>
+              </div>
+
+              {/* Right: Chat */}
+              <div className="col-span-7 flex flex-col relative">
+                <div className="flex-1 p-8 pb-28 overflow-y-auto" style={{ maxHeight: '68vh' }}>
+                  {/* Chat header */}
+                  <div className="reveal flex items-center gap-3 mb-10" style={{ animationDelay: '0.15s' }}>
+                    <Icon name="message-square" size={14} className="text-gold-400/50" sw={1.5} />
+                    <span className="font-mono text-[9px] tracking-[0.35em] uppercase text-white/20">Conversation</span>
+                  </div>
+
+                  {/* User message */}
+                  <div className="reveal mb-10" style={{ animationDelay: '0.3s' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-5 h-5 rounded-md bg-white/[0.06] flex items-center justify-center">
+                        <Icon name="user" size={10} className="text-white/30" sw={2} />
+                      </div>
+                      <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-white/15">You</span>
+                    </div>
+                    <p className="font-serif text-[24px] leading-[1.35] text-white/80 max-w-xl">
+                      How does the book describe the relationship between attention and memory formation?
+                    </p>
+                  </div>
+
+                  {/* AI response */}
+                  <div className="reveal" style={{ animationDelay: '0.5s' }}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-5 h-5 rounded-md bg-gold-400/10 flex items-center justify-center">
+                        <Icon name="sparkles" size={10} className="text-gold-400" sw={2} />
+                      </div>
+                      <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-gold-400/40">Talk2Books</span>
+                      <div className="flex-1 h-[1px] bg-gold-400/[0.04] ml-2" />
+                    </div>
+
+                    <div className="space-y-5 max-w-xl">
+                      <p className="font-serif text-[15px] leading-[1.9] text-white/45">
+                        <WA text="The text positions attention as the indispensable bridge between perception and lasting memory. Drawing on Chapter III, the author argues that memory is not a passive recording but an active reconstruction — each recall event rebuilds the trace from fragments scattered across cortical networks." base={0.7} />
+                      </p>
+                      <p className="font-serif text-[15px] leading-[1.9] text-white/45" style={{ textIndent: '1.5em' }}>
+                        <WA text='This reconstructive nature means that the quality of encoding is directly governed by attention at the moment of experience. The author invokes William James&#39;s image of the unattended world as "a blooming, buzzing confusion" to illustrate that without selective focus, sensory streams never consolidate into coherent episodic traces.' base={1.8} />
+                      </p>
+                    </div>
+
+                    {/* Sources */}
+                    <div className="flex items-center gap-3 mt-6">
+                      <span className="font-mono text-[8px] tracking-[0.3em] uppercase text-white/10">Sources</span>
+                      {[['Ch. III', 47], ['Ch. V', 112], ['Ch. VIII', 203]].map(([ch, pg], i) => (
+                        <span key={i} className="font-mono text-[9px] text-gold-400/30 hover:text-gold-400/60 transition-colors cursor-pointer">
+                          {ch}, p.{pg}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Input */}
+                <div className="absolute bottom-6 left-6 right-6">
+                  <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-xl px-5 py-3.5 flex items-center gap-3">
+                    <button className="w-8 h-8 rounded-xl bg-white/[0.03] border border-white/[0.04] flex items-center justify-center hover:bg-white/[0.06] transition-colors shrink-0">
+                      <Icon name="plus" size={14} className="text-white/20" sw={1.5} />
+                    </button>
+                    <input type="text" placeholder="Ask your document…" className="flex-1 bg-transparent text-white/60 text-[13px] placeholder-white/15 outline-none" />
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[9px] text-white/10 hidden md:inline">⌘ Enter</span>
+                      <button className="w-8 h-8 rounded-xl bg-gold-400 hover:bg-gold-300 flex items-center justify-center transition-all duration-300 shrink-0">
+                        <Icon name="arrow-up" size={14} className="text-canvas" sw={2.5} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    /* ══════════════════════════════════
+       APP
+       ══════════════════════════════════ */
+    function App() {
+      const [view, setView] = useState('landing');
+
+      return (
+        <div className="min-h-screen bg-canvas noise">
+          {/* ══════ NAV ══════ */}
+          <nav className="reveal relative z-50 flex items-center justify-between px-6 md:px-12 lg:px-20 py-5" style={{ animationDelay: '0s' }}>
+            <div className="flex items-center gap-2">
+              <span className="font-serif text-[18px] text-white tracking-tight">Talk<span className="text-gold-400">'</span>Books</span>
+            </div>
+
+            <div className="flex items-center gap-8">
+              {['Docs', 'GitHub', 'About'].map((l, i) => (
+                <span key={i} className="text-[12px] text-white/20 hover:text-white/50 transition-colors duration-300 cursor-pointer tracking-wide">{l}</span>
+              ))}
+              <div className="h-4 w-[1px] bg-white/[0.06]" />
+              <span className="text-[10px] font-mono text-white/15 border border-white/[0.06] px-3 py-1.5 rounded-lg">v0.1 · local</span>
+            </div>
+          </nav>
+
+          {/* ══════ VIEW TABS ══════ */}
+          <div className="reveal px-6 md:px-12 lg:px-20 mb-10" style={{ animationDelay: '0.05s' }}>
+            <div className="inline-flex items-center gap-1 bg-surface rounded-xl p-1 border border-white/[0.04]">
+              {[
+                { key: 'landing', label: 'Landing Page', icon: 'layout-template' },
+                { key: 'app', label: 'App Interface', icon: 'panel-left' },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setView(tab.key)}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-[12px] font-medium transition-all duration-300 ${
+                    view === tab.key
+                      ? 'bg-white/[0.06] text-white shadow-sm'
+                      : 'text-white/25 hover:text-white/40'
+                  }`}
+                >
+                  <Icon name={tab.icon} size={13} className={view === tab.key ? 'text-gold-400' : 'text-white/20'} sw={1.5} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ══════ CONTENT ══════ */}
+          {view === 'landing' ? <LandingPage /> : <AppInterface />}
+
+          {/* ══════ FOOTER ══════ */}
+          <footer className="reveal px-6 md:px-12 lg:px-20 py-8 border-t border-white/[0.03]" style={{ animationDelay: '0.8s' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <span className="font-mono text-[9px] text-white/10 tracking-[0.2em]">MODEL</span>
+                <span className="font-mono text-[9px] text-white/[0.06]">//</span>
+                <span className="font-mono text-[9px] text-gold-400/25">phi4-mini</span>
+                <span className="font-mono text-[9px] text-white/[0.06]">·</span>
+                <span className="font-mono text-[9px] text-white/10">142ms</span>
+                <span className="font-mono text-[9px] text-white/[0.06]">·</span>
+                <span className="font-mono text-[9px] text-white/10">Qdrant</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/30" />
+              </div>
+              <div className="flex items-center gap-6">
+                {['Privacy', 'Terms', 'GitHub'].map((l, i) => (
+                  <span key={i} className="font-mono text-[9px] text-white/10 hover:text-white/25 cursor-pointer transition-colors">{l}</span>
+                ))}
+              </div>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -75,6 +75,50 @@ async def health():
     log.info(f"Health check: {status}")
     return jsonify(status), 200 if all_ok else 503
 
+# ── GET /api/documents ─────────────────────────────────────────────────────────
+
+@app.route("/api/documents", methods=["GET"])
+async def documents():
+    """
+    Returns a deduplicated list of ingested documents by scrolling Qdrant.
+    Each unique file_name in the collection becomes one document entry.
+    """
+    try:
+        seen   = {}
+        offset = None
+
+        while True:
+            points, next_offset = qdrant_client.scroll(
+                collection_name="ttb_documents",
+                limit=100,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+
+            for point in points:
+                payload   = point.payload or {}
+                metadata  = payload.get("metadata", {})
+                file_name = metadata.get("file_name", "unknown")
+
+                if file_name != "unknown" and file_name not in seen:
+                    seen[file_name] = {
+                        "id":       file_name,
+                        "name":     file_name,
+                        "language": metadata.get("language", "unknown"),
+                    }
+
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        doc_list = sorted(seen.values(), key=lambda d: d["name"])
+        log.info(f"/api/documents: returning {len(doc_list)} document(s)")
+        return jsonify({"documents": doc_list}), 200
+
+    except Exception as e:
+        log.error(f"Failed to fetch documents: {e}", exc_info=True)
+        return jsonify({"error": "Could not retrieve documents from Qdrant."}), 500
 
 # ── POST /api/query ────────────────────────────────────────────────────────────
 

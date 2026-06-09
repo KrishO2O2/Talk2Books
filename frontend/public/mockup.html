@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Talk2Books — AI-Powered Document Reader</title>
+  <meta name="description" content="Talk2Books is an AI-powered RAG document reader that lets you converse with your books and documents using advanced language models." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            serif: ['Newsreader', 'Georgia', 'serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0B0D17; overflow-x: hidden; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    /* ── Staggered Bento Reveal ── */
+    @keyframes slideUpFade {
+      0%   { opacity: 0; transform: translateY(24px) scale(0.98); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .bento-card {
+      opacity: 0;
+      animation: slideUpFade 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* ── Kinetic Typography ── */
+    @keyframes textRevealUp {
+      0%   { transform: translateY(110%); opacity: 0; }
+      100% { transform: translateY(0%);   opacity: 1; }
+    }
+    .kinetic-text-wrap { overflow: hidden; display: inline-block; }
+    .kinetic-text {
+      display: inline-block;
+      opacity: 0;
+      animation: textRevealUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* ── AI Message Fade-In ── */
+    @keyframes editorialFadeIn {
+      0%   { opacity: 0; transform: translateY(8px); filter: blur(2px); }
+      100% { opacity: 1; transform: translateY(0);  filter: blur(0); }
+    }
+    .ai-word {
+      display: inline-block;
+      opacity: 0;
+      animation: editorialFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* ── Glow Pulse ── */
+    @keyframes glowPulse {
+      0%, 100% { box-shadow: 0 0 12px rgba(99,102,241,0.15); }
+      50%      { box-shadow: 0 0 28px rgba(99,102,241,0.35); }
+    }
+    .glow-pulse { animation: glowPulse 3s ease-in-out infinite; }
+
+    /* ── Subtle Gradient Shift ── */
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .gradient-shift {
+      background-size: 200% 200%;
+      animation: gradientShift 8s ease infinite;
+    }
+
+    /* ── Dot Pulse ── */
+    @keyframes dotPulse {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50%      { opacity: 1;   transform: scale(1.3); }
+    }
+    .dot-pulse span { animation: dotPulse 1.4s ease-in-out infinite; }
+    .dot-pulse span:nth-child(2) { animation-delay: 0.15s; }
+    .dot-pulse span:nth-child(3) { animation-delay: 0.3s; }
+
+    /* ── Status Bar Line ── */
+    @keyframes statusLine {
+      0%   { width: 0%; }
+      100% { width: 100%; }
+    }
+    .status-line-anim {
+      animation: statusLine 2.5s cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+
+    /* ── Float ── */
+    @keyframes floatY {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50%      { transform: translateX(-50%) translateY(-4px); }
+    }
+    .float-y { animation: floatY 4s ease-in-out infinite; }
+
+    /* ── Blinking cursor ── */
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    .cursor-blink { animation: blink 1s step-end infinite; }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    /* ───────── Icon Wrapper (lucide global) ───────── */
+    function Icon({ name, size = 18, className = '', strokeWidth = 1.5 }) {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (ref.current && lucide.icons[name]) {
+          ref.current.innerHTML = '';
+          const svg = lucide.createElement(lucide.icons[name]);
+          svg.setAttribute('width', size);
+          svg.setAttribute('height', size);
+          svg.setAttribute('stroke-width', strokeWidth);
+          if (className) svg.setAttribute('class', className);
+          ref.current.appendChild(svg);
+        }
+      }, [name, size, className, strokeWidth]);
+      return <span ref={ref} className="inline-flex items-center" />;
+    }
+
+    /* ───────── Kinetic Header ───────── */
+    function KineticHeader({ text, delay = 0, className = '' }) {
+      return (
+        <span className="kinetic-text-wrap">
+          <span className={`kinetic-text ${className}`} style={{ animationDelay: `${delay}s` }}>
+            {text}
+          </span>
+        </span>
+      );
+    }
+
+    /* ───────── AI Word Reveal ───────── */
+    function AIWordReveal({ text, baseDelay = 0 }) {
+      const words = text.split(' ');
+      return (
+        <span>
+          {words.map((w, i) => (
+            <span key={i}>
+              <span className="ai-word" style={{ animationDelay: `${baseDelay + i * 0.045}s` }}>
+                {w}
+              </span>{' '}
+            </span>
+          ))}
+        </span>
+      );
+    }
+
+    /* ───────── Context Viewer Card ───────── */
+    function ContextViewer() {
+      const passages = [
+        {
+          title: 'Chapter 3 — The Architecture of Memory',
+          body: `Human memory does not function like a filing cabinet. Instead, it is a fluid, reconstructive process. Each time we recall an event, we do not simply retrieve a stored record; rather, we actively rebuild the memory from scattered neural traces, influenced by our current state of mind, subsequent experiences, and the questions we are asked.`,
+          page: 'p. 47',
+          relevance: 94,
+        },
+        {
+          title: 'Chapter 5 — Distributed Representations',
+          body: `The concept of distributed representation stands as one of the most profound insights in modern cognitive science. Unlike localist schemes where a single node encodes a single concept, distributed representations spread meaning across many units, granting the system a natural capacity for generalization and graceful degradation.`,
+          page: 'p. 112',
+          relevance: 87,
+        },
+        {
+          title: 'Chapter 8 — Attention & Binding',
+          body: `Attention serves as the binding mechanism of conscious experience. Without it, the parallel streams of visual, auditory, and somatosensory processing would remain forever disjointed — a blooming, buzzing confusion, as William James famously described the infant's world.`,
+          page: 'p. 203',
+          relevance: 79,
+        },
+      ];
+
+      return (
+        <div
+          className="bento-card bg-[#1A1D27] border border-white/10 rounded-[24px] p-6 flex flex-col h-full relative overflow-hidden"
+          style={{ animationDelay: '0.1s' }}
+        >
+          {/* Top decorative gradient */}
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                <Icon name="book-open" size={15} className="text-indigo-400" />
+              </div>
+              <div>
+                <h2 className="text-white text-sm font-semibold tracking-tight">Context Viewer</h2>
+                <p className="text-gray-500 text-[11px] mt-0.5">3 passages retrieved</p>
+              </div>
+            </div>
+            <button className="w-7 h-7 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-colors duration-300">
+              <Icon name="settings-2" size={13} className="text-gray-400" />
+            </button>
+          </div>
+
+          {/* Active document pill */}
+          <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/5">
+            <Icon name="file-text" size={13} className="text-indigo-400" />
+            <span className="text-[12px] text-gray-300 font-medium truncate">cognitive_architectures_2024.pdf</span>
+            <span className="ml-auto text-[10px] text-gray-500 font-mono">342 pages</span>
+          </div>
+
+          {/* Passages */}
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {passages.map((p, i) => (
+              <div
+                key={i}
+                className="group rounded-2xl bg-white/[0.02] border border-white/5 p-4 hover:bg-white/[0.04] hover:border-indigo-500/20 transition-all duration-500 cursor-pointer"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-white text-[13px] font-semibold leading-snug tracking-tight">{p.title}</h3>
+                  <div className="flex items-center gap-1 ml-2 shrink-0">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" style={{ opacity: p.relevance / 100 }} />
+                    <span className="text-[10px] text-emerald-400 font-mono">{p.relevance}%</span>
+                  </div>
+                </div>
+                <p className="font-serif text-gray-400 text-[13px] leading-relaxed line-clamp-3 group-hover:text-gray-300 transition-colors duration-500">
+                  {p.body}
+                </p>
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-[10px] text-gray-500 font-mono bg-white/5 px-2 py-0.5 rounded-md">{p.page}</span>
+                  <span className="text-[10px] text-gray-600">·</span>
+                  <span className="text-[10px] text-gray-500">cosine: 0.{p.relevance}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Bottom source count */}
+          <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Icon name="layers" size={12} className="text-gray-500" />
+              <span className="text-[11px] text-gray-500">Vector chunks indexed</span>
+            </div>
+            <span className="text-[11px] text-indigo-400 font-mono font-medium">1,847</span>
+          </div>
+        </div>
+      );
+    }
+
+    /* ───────── Chat Stage Card ───────── */
+    function ChatStage() {
+      const messages = [
+        {
+          role: 'user',
+          text: 'How does the book describe the relationship between attention and memory formation?',
+        },
+        {
+          role: 'ai',
+          text: 'According to the text, attention serves as the critical binding mechanism that integrates disparate sensory streams into coherent memory traces. The author draws on William James\'s characterization of unattended experience as "a blooming, buzzing confusion" to emphasize that without selective attention, parallel processing streams remain disjointed and fail to consolidate into lasting memories.',
+          sources: ['Ch. 3, p. 47', 'Ch. 8, p. 203'],
+        },
+        {
+          role: 'ai',
+          text: 'Furthermore, the concept of distributed representations plays a key role here — memories are not stored in single locations but spread across many neural units. This architecture allows for what the author calls "graceful degradation," where partial attention can still capture enough binding signals to form a memory, albeit a less detailed one.',
+          sources: ['Ch. 5, p. 112'],
+        },
+      ];
+
+      return (
+        <div
+          className="bento-card bg-[#1A1D27] border border-white/10 rounded-[24px] p-6 flex flex-col h-full relative overflow-hidden"
+          style={{ animationDelay: '0.2s' }}
+        >
+          {/* Top decorative gradient */}
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                <Icon name="message-square" size={15} className="text-indigo-400" />
+              </div>
+              <div>
+                <h2 className="text-white text-sm font-semibold tracking-tight">Chat Stage</h2>
+                <p className="text-gray-500 text-[11px] mt-0.5">Conversing with your document</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-7 px-3 rounded-lg bg-white/5 border border-white/5 flex items-center gap-1.5 hover:bg-white/10 transition-colors duration-300">
+                <Icon name="history" size={12} className="text-gray-400" />
+                <span className="text-[11px] text-gray-400">History</span>
+              </button>
+              <button className="w-7 h-7 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-colors duration-300">
+                <Icon name="maximize-2" size={13} className="text-gray-400" />
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto space-y-5 pb-24 pr-1">
+            {messages.map((m, i) =>
+              m.role === 'user' ? (
+                <div key={i} className="flex justify-end">
+                  <div className="max-w-[75%] rounded-2xl rounded-br-md bg-indigo-500/15 border border-indigo-500/20 px-5 py-3.5">
+                    <p className="text-white text-[13.5px] leading-relaxed">{m.text}</p>
+                  </div>
+                </div>
+              ) : (
+                <div key={i} className="flex gap-3 items-start">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Icon name="sparkles" size={13} className="text-indigo-300" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <p className="font-serif text-gray-300 text-[14px] leading-[1.75]">
+                      <AIWordReveal text={m.text} baseDelay={i * 0.8} />
+                    </p>
+                    {m.sources && (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <Icon name="quote" size={11} className="text-gray-600" />
+                        {m.sources.map((s, si) => (
+                          <span
+                            key={si}
+                            className="text-[10px] text-indigo-400/80 font-mono bg-indigo-500/5 border border-indigo-500/10 px-2 py-0.5 rounded-md hover:bg-indigo-500/10 transition-colors cursor-pointer"
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* Typing indicator */}
+            <div className="flex gap-3 items-start">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center shrink-0 mt-0.5">
+                <Icon name="sparkles" size={13} className="text-indigo-300" />
+              </div>
+              <div className="flex items-center gap-1 py-3 dot-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Floating Input Pill ── */}
+          <div
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 w-11/12 rounded-full backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl p-2 flex items-center gap-2 float-y glow-pulse"
+          >
+            <button className="w-9 h-9 rounded-full bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-colors duration-300 shrink-0">
+              <Icon name="paperclip" size={15} className="text-gray-400" />
+            </button>
+            <input
+              type="text"
+              placeholder="Ask your document anything…"
+              className="flex-1 bg-transparent text-white text-[13.5px] placeholder-gray-500 outline-none font-sans px-1"
+            />
+            <div className="flex items-center gap-1.5">
+              <button className="w-9 h-9 rounded-full bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-colors duration-300 shrink-0">
+                <Icon name="mic" size={15} className="text-gray-400" />
+              </button>
+              <button className="w-9 h-9 rounded-full bg-indigo-500 hover:bg-indigo-400 flex items-center justify-center transition-all duration-300 hover:scale-105 shrink-0 shadow-lg shadow-indigo-500/25">
+                <Icon name="arrow-up" size={16} className="text-white" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ───────── Telemetry Card ───────── */
+    function TelemetryCard({ icon, label, value, sublabel, delay, statusColor = 'emerald', children }) {
+      return (
+        <div
+          className="bento-card bg-[#1A1D27] border border-white/10 rounded-[24px] p-5 relative overflow-hidden"
+          style={{ animationDelay: `${delay}s` }}
+        >
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center">
+              <Icon name={icon} size={15} className="text-gray-400" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[11px] text-gray-500 uppercase tracking-wider font-medium">{label}</p>
+              <p className="text-white text-sm font-semibold tracking-tight mt-0.5">{value}</p>
+            </div>
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full bg-${statusColor}-500/10 border border-${statusColor}-500/15`}>
+              <div className={`w-1.5 h-1.5 rounded-full bg-${statusColor}-400`} />
+              <span className={`text-[10px] text-${statusColor}-400 font-medium`}>{sublabel}</span>
+            </div>
+          </div>
+          {children}
+        </div>
+      );
+    }
+
+    /* ───────── App ───────── */
+    function App() {
+      return (
+        <div className="min-h-screen bg-[#0B0D17] text-white p-4 md:p-6 lg:p-8 flex flex-col">
+          {/* ── Top Bar ── */}
+          <header className="flex items-center justify-between mb-6 px-1">
+            <div className="flex items-center gap-3">
+              {/* Logo */}
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 gradient-shift">
+                <Icon name="book-open-check" size={20} className="text-white" />
+              </div>
+              <div className="overflow-hidden">
+                <h1 className="text-xl font-bold tracking-tight">
+                  <KineticHeader text="Talk" delay={0.3} className="text-white" />
+                  <KineticHeader text="2" delay={0.4} className="text-indigo-400" />
+                  <KineticHeader text="Books" delay={0.5} className="text-white" />
+                </h1>
+                <p className="text-[11px] text-gray-500 font-medium tracking-wide">
+                  <KineticHeader text="AI-Powered Document Intelligence" delay={0.7} className="text-gray-500" />
+                </p>
+              </div>
+            </div>
+
+            {/* Right controls */}
+            <div className="flex items-center gap-2">
+              <button className="h-9 px-4 rounded-xl bg-white/5 border border-white/5 flex items-center gap-2 hover:bg-white/10 transition-all duration-300 group">
+                <Icon name="upload" size={14} className="text-gray-400 group-hover:text-indigo-400 transition-colors" />
+                <span className="text-[12px] text-gray-300 font-medium">Upload</span>
+              </button>
+              <button className="h-9 px-4 rounded-xl bg-white/5 border border-white/5 flex items-center gap-2 hover:bg-white/10 transition-all duration-300 group">
+                <Icon name="library" size={14} className="text-gray-400 group-hover:text-indigo-400 transition-colors" />
+                <span className="text-[12px] text-gray-300 font-medium">Library</span>
+              </button>
+              <div className="w-[1px] h-5 bg-white/10 mx-1" />
+              <button className="w-9 h-9 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center hover:bg-white/10 transition-colors duration-300">
+                <Icon name="bell" size={15} className="text-gray-400" />
+              </button>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/30 to-purple-500/30 border border-white/10 flex items-center justify-center cursor-pointer hover:border-indigo-500/30 transition-colors">
+                <Icon name="user" size={15} className="text-indigo-300" />
+              </div>
+            </div>
+          </header>
+
+          {/* ── Main Grid ── */}
+          <div className="flex-1 grid grid-cols-12 gap-4 mb-4">
+            {/* Context Viewer — 4 cols */}
+            <div className="col-span-4">
+              <ContextViewer />
+            </div>
+            {/* Chat Stage — 8 cols */}
+            <div className="col-span-8">
+              <ChatStage />
+            </div>
+          </div>
+
+          {/* ── Telemetry Row ── */}
+          <div className="grid grid-cols-12 gap-4">
+            {/* Model Card */}
+            <div className="col-span-3">
+              <TelemetryCard
+                icon="cpu"
+                label="Active Model"
+                value="phi4-mini"
+                sublabel="Running"
+                delay={0.35}
+                statusColor="emerald"
+              >
+                <div className="space-y-2 mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500">Latency</span>
+                    <span className="text-[10px] text-gray-300 font-mono">142ms</span>
+                  </div>
+                  <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 status-line-anim" style={{ maxWidth: '35%' }} />
+                  </div>
+                </div>
+              </TelemetryCard>
+            </div>
+
+            {/* Vector DB Card */}
+            <div className="col-span-3">
+              <TelemetryCard
+                icon="database"
+                label="Vector Store"
+                value="Qdrant"
+                sublabel="Connected"
+                delay={0.45}
+                statusColor="emerald"
+              >
+                <div className="space-y-2 mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500">Collections</span>
+                    <span className="text-[10px] text-gray-300 font-mono">3 active</span>
+                  </div>
+                  <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 status-line-anim" style={{ maxWidth: '60%' }} />
+                  </div>
+                </div>
+              </TelemetryCard>
+            </div>
+
+            {/* Embeddings Card */}
+            <div className="col-span-3">
+              <TelemetryCard
+                icon="binary"
+                label="Embeddings"
+                value="all-MiniLM-L6"
+                sublabel="384-dim"
+                delay={0.55}
+                statusColor="indigo"
+              >
+                <div className="space-y-2 mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500">Throughput</span>
+                    <span className="text-[10px] text-gray-300 font-mono">~220 tok/s</span>
+                  </div>
+                  <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 status-line-anim" style={{ maxWidth: '72%' }} />
+                  </div>
+                </div>
+              </TelemetryCard>
+            </div>
+
+            {/* Session Card */}
+            <div className="col-span-3">
+              <TelemetryCard
+                icon="activity"
+                label="Session"
+                value="Active"
+                sublabel="12m 34s"
+                delay={0.65}
+                statusColor="amber"
+              >
+                <div className="space-y-2 mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-500">Queries</span>
+                    <span className="text-[10px] text-gray-300 font-mono">7 total</span>
+                  </div>
+                  <div className="w-full h-1 rounded-full bg-white/5 overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 status-line-anim" style={{ maxWidth: '48%' }} />
+                  </div>
+                </div>
+              </TelemetryCard>
+            </div>
+          </div>
+
+          {/* Bottom subtle branding */}
+          <div className="mt-4 flex items-center justify-center gap-2 opacity-30">
+            <Icon name="fingerprint" size={12} className="text-gray-500" />
+            <span className="text-[10px] text-gray-500 font-mono tracking-widest uppercase">Talk2Books · Studio Dunbar Design System</span>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
