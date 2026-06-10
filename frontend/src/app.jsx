@@ -6,6 +6,7 @@
 // ============================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import LandingPage from './LandingPage.jsx';
 
 // All /api/* requests are proxied to localhost:5000 by vite.config.js
 const API_BASE = '/api';
@@ -13,6 +14,19 @@ const API_BASE = '/api';
 // ── Utility ──────────────────────────────────────────────────
 function now() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Normalize backend chunk shape → what SourceCard expects
+function normalizeChunk(chunk) {
+  return {
+    content:  chunk.text ?? chunk.content ?? '',
+    score:    chunk.score ?? 0,
+    metadata: {
+      source:  chunk.file_name ?? chunk.source ?? '',
+      section: chunk.file_name ?? chunk.source ?? '',
+      page:    chunk.metadata?.page ?? null,
+    },
+  };
 }
 
 // ── Sub-components ────────────────────────────────────────────
@@ -111,6 +125,7 @@ function SourceCard({ source, index, active }) {
 
 // ── Main App ──────────────────────────────────────────────────
 export default function App() {
+  const [showApp, setShowApp] = useState(false);
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState('');
   const [loading,    setLoading]    = useState(false);
@@ -199,7 +214,7 @@ export default function App() {
       const data = await res.json();
       // ── Flexible response handling ──
       const answer  = data.answer ?? data.response ?? data.result ?? 'No answer returned.';
-      const srcs    = data.sources ?? data.context ?? data.chunks ?? [];
+      const srcs = (data.chunks ?? data.context ?? []).map(normalizeChunk);
 
       setMessages(prev => [...prev, {
         role:    'ai',
@@ -241,6 +256,8 @@ export default function App() {
   }[backendStatus];
 
   // ────────────────────────────────────────────────────────────
+  if (!showApp) return <LandingPage onEnter={() => setShowApp(true)} />;
+  
   return (
     <div className="ttb">
 
