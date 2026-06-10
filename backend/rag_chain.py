@@ -99,14 +99,10 @@ def detect_query_language(question: str) -> str:
 
 # ── Day 2 + 3: Retrieval with Language Filter ──────────────────────────────────
 
-def retrieve_chunks(question: str, filter_language: bool = True) -> list[dict]:
-    """
-    Embed the question and search Qdrant for the top-k most similar chunks.
-    Falls back to unfiltered search if no language-matching chunks found.
-    """
+def retrieve_chunks(question: str, filter_language: bool = True, language: str | None = None) -> list[dict]:
     query_vector = embed_query(question)
-    lang = detect_query_language(question)
-    log.info(f"Query language detected: '{lang}'")
+    lang = language if language else detect_query_language(question)
+    log.info(f"Query language: '{lang}' ({'manual' if language else 'auto-detected'})")
 
     query_filter = None
     if filter_language and lang != "unknown":
@@ -199,7 +195,9 @@ def generate_answer(prompt: str) -> str:
 
 # ── Day 5: Full pipeline ───────────────────────────────────────────────────────
 
-def ask(question: str, filter_language: bool = True) -> dict:
+def ask(question: str, filter_language: bool = True, language: str | None = None) -> dict:
+
+    chunks  = retrieve_chunks(question, filter_language=filter_language, language=language)
     """
     The complete RAG pipeline in one call.
     This is the single function that app.py calls.
@@ -208,7 +206,6 @@ def ask(question: str, filter_language: bool = True) -> dict:
     """
     log.info(f"Pipeline started for: '{question}'")
 
-    chunks  = retrieve_chunks(question, filter_language=filter_language)
     prompt  = build_prompt(question, chunks)
     answer  = generate_answer(prompt)
     sources = list({c["file_name"] for c in chunks if c["file_name"] != "unknown"})

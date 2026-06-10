@@ -176,11 +176,13 @@ async def query():
     if not isinstance(filter_language, bool):
         filter_language = True   # safe default if someone sends a weird value
 
-    log.info(f"Question: '{question}' | filter_language={filter_language}")
+    language = data.get("language", None)
+
+    log.info(f"Question: '{question}' | filter_language={filter_language} | language={language}")
 
     # ── Run the RAG pipeline ───────────────────────────────────────────────────
     try:
-        result = ask(question, filter_language=filter_language)
+        result = ask(question, filter_language=filter_language, language=language)
     except Exception as e:
         # Catch any unexpected pipeline errors so the server never crashes
         log.error(f"Pipeline error: {e}", exc_info=True)

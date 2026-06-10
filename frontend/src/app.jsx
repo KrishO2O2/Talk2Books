@@ -125,6 +125,7 @@ function SourceCard({ source, index, active }) {
 
 // ── Main App ──────────────────────────────────────────────────
 export default function App() {
+  const [language, setLanguage] = useState('en');
   const [showApp, setShowApp] = useState(false);
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState('');
@@ -197,7 +198,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const body = { question };
+      const body = { question, language };
       if (activeDoc?.id) body.doc_id = activeDoc.id;
 
       const res = await fetch(`${API_BASE}/query`, {
@@ -389,13 +390,20 @@ export default function App() {
                 aria-label="Question input"
               />
               <div className="input-actions">
+
                 {/* Day 11 – language selector */}
-                <select className="lang-select" aria-label="Language">
-                  <option value="en">EN</option>
-                  <option value="hi">HI</option>
-                  <option value="pa">PA</option>
-                  <option value="sa">SA</option>
+                <select
+                  className="lang-select"
+                  aria-label="Language"
+                  value={language}
+                  onChange={e => setLanguage(e.target.value)}
+                >
+                  <option value="en">English</option>
+                  <option value="hi">Hindi</option>
+                  <option value="pa">Punjabi</option>
+                  <option value="sa">Sanskrit</option>
                 </select>
+
                 <button
                   className={`send-btn${(!input.trim() || loading) ? ' send-btn--disabled' : ''}`}
                   onClick={sendQuestion}
