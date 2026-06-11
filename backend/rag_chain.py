@@ -99,22 +99,19 @@ def detect_query_language(question: str) -> str:
 
 # ── Day 2 + 3: Retrieval with Language Filter ──────────────────────────────────
 
-def retrieve_chunks(question: str, filter_language: bool = True, language: str | None = None) -> list[dict]:
+def retrieve_chunks(question: str, filter_language: bool = True, language: str | None = None, doc_id: str | None = None) -> list[dict]:
     query_vector = embed_query(question)
     lang = language if language else detect_query_language(question)
     log.info(f"Query language: '{lang}' ({'manual' if language else 'auto-detected'})")
 
-    query_filter = None
+    # Build combined filter — doc_id is always respected, language is optional
+    must = []
+    if doc_id:
+        must.append(FieldCondition(key="metadata.file_name", match=MatchValue(value=doc_id)))
     if filter_language and lang != "unknown":
-        query_filter = Filter(
-            must=[
-                FieldCondition(
-                    key="metadata.language",
-                    match=MatchValue(value=lang),
-                )
-            ]
-        )
-        log.info(f"Applying language filter: metadata.language = '{lang}'")
+        must.append(FieldCondition(key="metadata.language", match=MatchValue(value=lang)))
+
+    query_filter = Filter(must=must) if must else None
 
     results = qdrant.query_points(
         collection_name=COLLECTION_NAME,
@@ -124,13 +121,16 @@ def retrieve_chunks(question: str, filter_language: bool = True, language: str |
         query_filter=query_filter,
     ).points
 
-    if not results and query_filter is not None:
-        log.warning(f"No chunks for language='{lang}'. Falling back to unfiltered search.")
+    # Fallback: drop language filter but keep doc_id filter
+    if not results and filter_language and lang != "unknown":
+        log.warning(f"No chunks for language='{lang}'. Retrying without language filter.")
+        fallback = [FieldCondition(key="metadata.file_name", match=MatchValue(value=doc_id))] if doc_id else []
         results = qdrant.query_points(
             collection_name=COLLECTION_NAME,
             query=query_vector,
             limit=TOP_K,
             with_payload=True,
+            query_filter=Filter(must=fallback) if fallback else None,
         ).points
 
     chunks = []
@@ -195,9 +195,9 @@ def generate_answer(prompt: str) -> str:
 
 # ── Day 5: Full pipeline ───────────────────────────────────────────────────────
 
-def ask(question: str, filter_language: bool = True, language: str | None = None) -> dict:
-
-    chunks  = retrieve_chunks(question, filter_language=filter_language, language=language)
+def ask(question: str, filter_language: bool = True, language: str | None = None, doc_id: str | None = None) -> dict:
+    
+    chunks = retrieve_chunks(question, filter_language=filter_language, language=language, doc_id=doc_id)
     """
     The complete RAG pipeline in one call.
     This is the single function that app.py calls.

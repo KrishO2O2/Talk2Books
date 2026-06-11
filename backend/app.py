@@ -177,12 +177,13 @@ async def query():
         filter_language = True   # safe default if someone sends a weird value
 
     language = data.get("language", None)
+    doc_id = data.get("doc_id", None)
 
     log.info(f"Question: '{question}' | filter_language={filter_language} | language={language}")
 
     # ── Run the RAG pipeline ───────────────────────────────────────────────────
     try:
-        result = ask(question, filter_language=filter_language, language=language)
+        result = ask(question, filter_language=filter_language, language=language, doc_id=doc_id)
     except Exception as e:
         # Catch any unexpected pipeline errors so the server never crashes
         log.error(f"Pipeline error: {e}", exc_info=True)
