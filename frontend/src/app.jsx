@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import LandingPage from './LandingPage.jsx';
+import ReactMarkdown from 'react-markdown';
 
 // All /api/* requests are proxied to localhost:5000 by vite.config.js
 const API_BASE = '/api';
@@ -40,7 +41,11 @@ function Message({ msg }) {
   return (
     <div className={`msg msg--${cls}`}>
       <div className="msg__bubble">
-        {msg.content}
+      {isUser || isError ? (
+        msg.content
+      ) : (
+        <ReactMarkdown>{msg.content}</ReactMarkdown>
+      )}
 
         {/* Day 10 – inline citation refs */}
         {!isUser && msg.sources?.length > 0 && (
