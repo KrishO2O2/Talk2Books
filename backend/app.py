@@ -14,6 +14,8 @@ from quart_cors import cors
 from rag_chain import ask
 from qdrant_client import QdrantClient
 import httpx
+from pathlib import Path
+from ingest import ingest_file
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -28,6 +30,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_QUESTION_LENGTH = 1000   # characters — prevents absurdly long inputs
 MIN_QUESTION_LENGTH = 3      # characters — prevents single-character nonsense
+DATA_DIR = Path("data")
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 app = Quart(__name__)
@@ -119,6 +122,44 @@ async def documents():
     except Exception as e:
         log.error(f"Failed to fetch documents: {e}", exc_info=True)
         return jsonify({"error": "Could not retrieve documents from Qdrant."}), 500
+
+# ── POST /api/upload ───────────────────────────────────────────────────────────
+
+@app.route("/api/upload", methods=["POST"])
+async def upload():
+    files = await request.files
+    if "file" not in files:
+        return jsonify({"error": "No file provided."}), 400
+
+    file     = files["file"]
+    filename = file.filename or ""
+    ext      = Path(filename).suffix.lower()
+
+    if ext not in {".pdf", ".docx", ".txt", ".csv"}:
+        return jsonify({
+            "error": f"'{ext}' is not supported. Allowed: .pdf .docx .txt .csv"
+        }), 400
+
+    DATA_DIR.mkdir(exist_ok=True)
+    save_path = DATA_DIR / filename
+
+    try:
+        content = file.read()
+        with open(save_path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        log.error(f"Failed to save uploaded file: {e}")
+        return jsonify({"error": "Could not save file."}), 500
+
+    try:
+        doc_info = ingest_file(str(save_path))
+    except Exception as e:
+        log.error(f"Ingestion failed for '{filename}': {e}", exc_info=True)
+        save_path.unlink(missing_ok=True)
+        return jsonify({"error": "File saved but ingestion failed."}), 500
+
+    log.info(f"Upload complete: {filename}")
+    return jsonify({"document": doc_info}), 201
 
 # ── POST /api/query ────────────────────────────────────────────────────────────
 

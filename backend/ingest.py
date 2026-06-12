@@ -271,6 +271,53 @@ def ingest(
     return len(chunks)
 
 
+# ── Single-file ingest (called by upload endpoint) ─────────────────────────────
+
+def ingest_file(file_path: str, qdrant_url: str = QDRANT_URL) -> dict:
+    """
+    Ingest one file into Qdrant. Called by the /api/upload endpoint.
+    Returns document metadata dict ready to send to the frontend.
+    """
+    path = Path(file_path)
+
+    docs = load_document(path)
+    for doc in docs:
+        doc.page_content          = normalize_text(doc.page_content)
+        lang                      = detect_language(doc.page_content)
+        doc.metadata["language"]  = lang
+        doc.metadata["source"]    = str(path)
+        doc.metadata["file_name"] = path.name
+
+    chunks = split_documents(docs)
+
+    # Use cpu — safer than mps in async server context
+    embeddings = HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL,
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
+    )
+
+    client = QdrantClient(url=qdrant_url)
+    get_or_create_collection(client)
+
+    from langchain_qdrant import QdrantVectorStore
+    QdrantVectorStore.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        url=qdrant_url,
+        collection_name=COLLECTION_NAME,
+        force_recreate=False,
+    )
+
+    lang = docs[0].metadata.get("language", "unknown") if docs else "unknown"
+    log.info(f"ingest_file: '{path.name}' → {len(chunks)} chunk(s) stored.")
+    return {
+        "id":       path.name,
+        "name":     path.name,
+        "language": lang,
+        "chunks":   len(chunks),
+    }
+
 # ── CLI entry point ────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
