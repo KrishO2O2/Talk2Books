@@ -33,7 +33,7 @@ function normalizeChunk(chunk) {
 // ── Sub-components ────────────────────────────────────────────
 
 /** Single chat bubble */
-function Message({ msg }) {
+function Message({ msg, onCitationClick }) {
   const isUser  = msg.role === 'user';
   const isError = msg.role === 'error';
   const cls = isUser ? 'user' : isError ? 'error' : 'ai';
@@ -51,7 +51,13 @@ function Message({ msg }) {
         {!isUser && msg.sources?.length > 0 && (
           <span className="msg__refs">
             {msg.sources.slice(0, 3).map((_, i) => (
-              <span key={i} className="msg__ref">{i + 1}</span>
+              <span
+              key={i}
+              className="msg__ref"
+              onClick={() => onCitationClick?.(i)}
+            >
+              {i + 1}
+            </span>
             ))}
           </span>
         )}
@@ -111,7 +117,10 @@ function SourceCard({ source, index, active }) {
   const snippet = source.content?.trim().slice(0, 150) ?? '';
 
   return (
-    <div className={`source-card${active ? ' source-card--active' : ''}`}>
+      <div 
+        id={`source-card-${index}`}
+        className={`source-card${active ? ' source-card--active' : ''}`}
+      >
       <div className="source-card__header">
         <span className="source-card__num">Source {String(index + 1).padStart(2, '0')}</span>
         <span className="source-card__score">{score}</span>
@@ -139,6 +148,7 @@ export default function App() {
   const [docs,       setDocs]       = useState([]);
   const [activeDoc,  setActiveDoc]  = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
+  const [activeSource, setActiveSource] = useState(null);
   // 'connecting' | 'online' | 'offline'
 
   const messagesEndRef = useRef(null);
@@ -187,6 +197,14 @@ export default function App() {
     }
   };
 
+  const handleCitationClick = useCallback((index) => {
+    setActiveSource(index);
+    setTimeout(() => {
+      document.getElementById(`source-card-${index}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  }, []);
+
   // ── Day 8: Core POST to /api/query ──
   const sendQuestion = useCallback(async () => {
     const question = input.trim();
@@ -194,6 +212,7 @@ export default function App() {
 
     setInput('');
     setSources([]);
+    setActiveSource(null);
 
     setMessages(prev => [...prev, {
       role: 'user',
@@ -368,7 +387,7 @@ export default function App() {
             )}
 
             {messages.map((msg, i) => (
-              <Message key={i} msg={msg} />
+              <Message key={i} msg={msg} onCitationClick={handleCitationClick} />
             ))}
 
             {loading && (
@@ -449,7 +468,7 @@ export default function App() {
                   key={i}
                   source={src}
                   index={i}
-                  active={i === 0}
+                  active={i === activeSource}
                 />
               ))
             )}
