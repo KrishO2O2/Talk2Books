@@ -148,6 +148,7 @@ export default function App() {
   const [loading,    setLoading]    = useState(false);
   const [sources,    setSources]    = useState([]);
   const [docs,       setDocs]       = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeDoc,  setActiveDoc]  = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [activeSource, setActiveSource] = useState(null);
@@ -304,6 +305,11 @@ export default function App() {
     }
   };
 
+  // Filter library by search query (case-insensitive, matches name or id)
+  const filteredDocs = docs.filter(doc =>
+    (doc.name || doc.id || '').toLowerCase().includes(searchQuery.trim().toLowerCase())
+  );
+
   // Sources to display: current query OR last AI message that had sources
   const displaySources = sources.length > 0
     ? sources
@@ -359,19 +365,25 @@ export default function App() {
             <span className="panel-label">Library</span>
             <div className="search-box">
               <i className="ti ti-search" />
-              <span>Search docs...</span>
+              <input
+              type="text"
+              className="search-input"
+              placeholder="Search docs..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
 
           <div className="doc-list">
-            {docs.length === 0 ? (
+            {filteredDocs.length === 0 ? (
               <div className="empty-state">
                 <i className="ti ti-books" />
-                <p>No documents found</p>
-                <small>Run ingest.py first, then refresh</small>
+                <p>{docs.length === 0 ? 'No documents found' : 'No matches'}</p>
+                <small>{docs.length === 0 ? 'Run ingest.py first, then refresh' : 'Try a different search term'}</small>
               </div>
             ) : (
-              docs.map(doc => (
+              filteredDocs.map(doc => (
                 <DocItem
                   key={doc.id}
                   doc={doc}

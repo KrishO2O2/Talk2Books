@@ -197,6 +197,18 @@ button, select, textarea, input {
 }
 .search-box i { font-size: 16px; }
 
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--t1);
+  font-size: 15px;
+  font-family: var(--sans);
+  min-width: 0;
+}
+.search-input::placeholder { color: var(--t3); }
+
 .empty-state {
   display: flex;
   flex-direction: column;
