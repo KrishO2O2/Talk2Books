@@ -139,6 +139,8 @@ function SourceCard({ source, index, active }) {
 
 // ── Main App ──────────────────────────────────────────────────
 export default function App() {
+  const [uploading,    setUploading]    = useState(false);
+  const fileInputRef = useRef(null);
   const [language, setLanguage] = useState('en');
   const [showApp, setShowApp] = useState(false);
   const [messages,   setMessages]   = useState([]);
@@ -261,6 +263,40 @@ export default function App() {
     }
   }, [input, loading, activeDoc]);
 
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+  
+    setUploading(true);
+    const form = new FormData();
+    form.append('file', file);
+  
+    try {
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      await fetchDocs();
+      setActiveDoc(data.document);
+      setSources([]);
+      setMessages([]);
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        role: 'error',
+        content: `Upload failed: ${err.message}`,
+        time: now(),
+      }]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleKeyDown = e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -349,8 +385,20 @@ export default function App() {
             )}
           </div>
 
-          <button className="upload-btn">
-            <i className="ti ti-upload" /> Upload document
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt,.csv"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+          <button
+            className="upload-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            <i className={`ti ${uploading ? 'ti-loader-2' : 'ti-upload'}`} />
+            {uploading ? 'Processing...' : 'Upload document'}
           </button>
         </aside>
 
