@@ -142,7 +142,13 @@ export default function App() {
   const [uploading,    setUploading]    = useState(false);
   const fileInputRef = useRef(null);
   const [language, setLanguage] = useState('en');
-  const [showApp, setShowApp] = useState(false);
+  const [showApp, setShowApp] = useState(() => {
+    try {
+      return localStorage.getItem('ttb_entered') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState('');
   const [loading,    setLoading]    = useState(false);
@@ -175,6 +181,36 @@ export default function App() {
     checkBackend();
     fetchDocs();
   }, []);
+
+  // ── Day 17: Load saved chat history whenever the active document changes ──
+  useEffect(() => {
+    if (!activeDoc?.id) {
+      setMessages([]);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(`ttb_chat_${activeDoc.id}`);
+      setMessages(saved ? JSON.parse(saved) : []);
+    } catch {
+      setMessages([]);
+    }
+    setSources([]);
+    setActiveSource(null);
+  }, [activeDoc?.id]);
+
+  // ── Day 17: Persist chat history to localStorage whenever it changes ──
+  useEffect(() => {
+    if (!activeDoc?.id) return;
+    try {
+      if (messages.length > 0) {
+        localStorage.setItem(`ttb_chat_${activeDoc.id}`, JSON.stringify(messages));
+      } else {
+        localStorage.removeItem(`ttb_chat_${activeDoc.id}`);
+      }
+    } catch {
+      // localStorage unavailable or full — fail silently
+    }
+  }, [messages, activeDoc?.id]);
 
   // ── Day 8: Check if backend is alive ──
   const checkBackend = async () => {
@@ -323,16 +359,26 @@ export default function App() {
   }[backendStatus];
 
   // ────────────────────────────────────────────────────────────
-  if (!showApp) return <LandingPage onEnter={() => setShowApp(true)} />;
+  if (!showApp) return <LandingPage onEnter={() => {
+    try { localStorage.setItem('ttb_entered', 'true'); } catch {}
+    setShowApp(true);
+  }} />;
   
   return (
     <div className="ttb">
 
       {/* ── Top Bar ──────────────────────────────────── */}
       <header className="topbar">
-        <div className="topbar__logo">
-          TTB<sup className="topbar__sup">✦</sup>
-        </div>
+      <div
+        className="topbar__logo"
+        onClick={() => setShowApp(false)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => e.key === 'Enter' && setShowApp(false)}
+        title="Back to home"
+      >
+        TTB<sup className="topbar__sup">✦</sup>
+      </div>
 
         <div className="topbar__status">
           <span className={`status-dot status-dot--${backendStatus}`} />

@@ -102,7 +102,10 @@ button, select, textarea, input {
   letter-spacing: -0.01em;
   color: var(--t1);
   white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
+.topbar__logo:hover { opacity: 0.75; }
 
 .topbar__sup {
   color: var(--acc);
