@@ -727,3 +727,76 @@ button, select, textarea, input {
   color: var(--t1);
   font-size: 13px;
 }
+
+/* ── Day 18: Settings Modal ───────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeUp 0.15s ease-out;
+}
+
+.modal {
+  width: 440px;
+  max-width: 92vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--s1);
+  border: 0.5px solid var(--b2);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 0.5px solid var(--bd);
+}
+
+.modal__title {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--t1);
+}
+
+.modal__body { padding: 4px 20px 18px; }
+.modal__section { margin-top: 18px; }
+
+.modal__label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--acc);
+  margin-bottom: 8px;
+}
+
+.modal__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 0.5px solid var(--bd);
+  font-size: 15px;
+}
+.modal__row:last-child { border-bottom: none; }
+.modal__row span:first-child { color: var(--t2); }
+.modal__row span:last-child  { color: var(--t1); font-weight: 500; }
+
+.modal__status { display: flex; align-items: center; gap: 7px; }
+
+.modal__footer {
+  padding: 14px 20px;
+  border-top: 0.5px solid var(--bd);
+  text-align: center;
+  font-size: 13px;
+  color: var(--t3);
+  letter-spacing: 0.04em;
+}

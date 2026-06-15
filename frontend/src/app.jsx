@@ -158,6 +158,7 @@ export default function App() {
   const [activeDoc,  setActiveDoc]  = useState(null);
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [activeSource, setActiveSource] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
   // 'connecting' | 'online' | 'offline'
 
   const messagesEndRef = useRef(null);
@@ -167,6 +168,14 @@ export default function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  // ── Day 18: Close settings modal on Escape key ──
+  useEffect(() => {
+    if (!showSettings) return;
+    const onKey = e => e.key === 'Escape' && setShowSettings(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showSettings]);
 
   // ── Auto-resize textarea ──
   useEffect(() => {
@@ -396,11 +405,86 @@ export default function App() {
           <button className="icon-btn" title="Clear chat" onClick={() => { setMessages([]); setSources([]); }}>
             <i className="ti ti-trash" />
           </button>
-          <button className="icon-btn" title="Settings">
+          <button className="icon-btn" title="Settings" onClick={() => setShowSettings(true)}>
             <i className="ti ti-settings" />
           </button>
         </div>
       </header>
+
+      {/* ── Day 18: Settings / System Info Modal ──────────── */}
+      {showSettings && (
+        <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="System information"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="modal__header">
+              <span className="modal__title">System Info</span>
+              <button className="icon-btn" onClick={() => setShowSettings(false)} aria-label="Close">
+                <i className="ti ti-x" />
+              </button>
+            </div>
+
+            <div className="modal__body">
+
+              <div className="modal__section">
+                <span className="modal__label">Connection</span>
+                <div className="modal__row">
+                  <span>Status</span>
+                  <span className="modal__status">
+                    <span className={`status-dot status-dot--${backendStatus}`} />
+                    {statusText}
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal__section">
+                <span className="modal__label">Language Model</span>
+                <div className="modal__row">
+                  <span>Model</span><span>phi4-mini</span>
+                </div>
+                <div className="modal__row">
+                  <span>Runtime</span><span>Ollama (local)</span>
+                </div>
+              </div>
+
+              <div className="modal__section">
+                <span className="modal__label">Retrieval</span>
+                <div className="modal__row">
+                  <span>Embedding model</span><span>all-mpnet-base-v2</span>
+                </div>
+                <div className="modal__row">
+                  <span>Vector dimensions</span><span>768</span>
+                </div>
+                <div className="modal__row">
+                  <span>Top-K results</span><span>3</span>
+                </div>
+                <div className="modal__row">
+                  <span>Vector store</span><span>Qdrant (local)</span>
+                </div>
+              </div>
+
+              <div className="modal__section">
+                <span className="modal__label">Document Processing</span>
+                <div className="modal__row">
+                  <span>Chunk size</span><span>500 chars</span>
+                </div>
+                <div className="modal__row">
+                  <span>Chunk overlap</span><span>50 chars</span>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="modal__footer">
+              Talk²Books · v0.1 · Fully local · Private
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Body ─────────────────────────────────────── */}
       <div className="body">
