@@ -84,7 +84,7 @@ function ThinkingBubble({ label }) {
 }
 
 /** Document row in the left sidebar */
-function DocItem({ doc, active, onClick }) {
+function DocItem({ doc, active, onClick, onDelete }) {
   return (
     <div
       className={`doc-item${active ? ' doc-item--active' : ''}`}
@@ -104,6 +104,14 @@ function DocItem({ doc, active, onClick }) {
           {doc.pages ? ` · ${doc.pages}p` : ''}
         </div>
       </div>
+      <button
+        className="doc-item__delete"
+        onClick={e => { e.stopPropagation(); onDelete(doc); }}
+        title="Delete document"
+        aria-label={`Delete ${doc.name || doc.id}`}
+      >
+        <i className="ti ti-trash" />
+      </button>
     </div>
   );
 }
@@ -343,6 +351,39 @@ export default function App() {
     }
   };
 
+  const handleDeleteDoc = useCallback(async (doc) => {
+    const name = doc.name || doc.id;
+    if (!window.confirm(`Delete "${name}"? This removes it from the library and search index permanently.`)) {
+      return;
+    }
+  
+    try {
+      const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(doc.id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+  
+      setDocs(prev => prev.filter(d => d.id !== doc.id));
+      try { localStorage.removeItem(`ttb_chat_${doc.id}`); } catch {}
+  
+      if (activeDoc?.id === doc.id) {
+        setActiveDoc(null);
+        setMessages([]);
+        setSources([]);
+        setActiveSource(null);
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        role: 'error',
+        content: `Delete failed: ${err.message}`,
+        time: now(),
+      }]);
+    }
+  }, [activeDoc]);
+
   const handleKeyDown = e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -522,6 +563,7 @@ export default function App() {
                     setActiveDoc(doc);
                     setSources([]);
                   }}
+                  onDelete={handleDeleteDoc}
                 />
               ))
             )}

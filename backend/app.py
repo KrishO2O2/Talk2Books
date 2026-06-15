@@ -13,6 +13,7 @@ from quart import Quart, request, jsonify
 from quart_cors import cors
 from rag_chain import ask
 from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 import httpx
 from pathlib import Path
 from ingest import ingest_file
@@ -122,6 +123,35 @@ async def documents():
     except Exception as e:
         log.error(f"Failed to fetch documents: {e}", exc_info=True)
         return jsonify({"error": "Could not retrieve documents from Qdrant."}), 500
+    
+    # ── DELETE /api/documents/<doc_id> ──────────────────────────────────────────────
+
+@app.route("/api/documents/<doc_id>", methods=["DELETE"])
+async def delete_document(doc_id):
+    """
+    Deletes all Qdrant points for the given file_name, and removes
+    the source file from data/ if it exists.
+    """
+    try:
+        qdrant_client.delete(
+            collection_name="ttb_documents",
+            points_selector=Filter(
+                must=[FieldCondition(key="metadata.file_name", match=MatchValue(value=doc_id))]
+            ),
+        )
+    except Exception as e:
+        log.error(f"Failed to delete '{doc_id}' from Qdrant: {e}", exc_info=True)
+        return jsonify({"error": "Could not delete document from Qdrant."}), 500
+
+    try:
+        file_path = DATA_DIR / doc_id
+        if file_path.exists():
+            file_path.unlink()
+    except Exception as e:
+        log.warning(f"Deleted from Qdrant but could not remove file '{doc_id}': {e}")
+
+    log.info(f"Deleted document: '{doc_id}'")
+    return jsonify({"deleted": doc_id}), 200
 
 # ── POST /api/upload ───────────────────────────────────────────────────────────
 

@@ -292,6 +292,31 @@ button, select, textarea, input {
   color: var(--t3);
 }
 
+.doc-item__delete {
+  flex-shrink: 0;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--t3);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.13s, color 0.13s, background 0.13s;
+}
+.doc-item:hover .doc-item__delete,
+.doc-item__delete:focus-visible {
+  opacity: 1;
+}
+.doc-item__delete:hover {
+  color: var(--err);
+  background: rgba(248, 113, 113, 0.1);
+}
+
 .upload-btn {
   margin: 9px;
   padding: 13px;
@@ -313,6 +338,16 @@ button, select, textarea, input {
 .upload-btn:hover {
   color: var(--t2);
   border-color: var(--b2);
+}
+
+/* ── Day 18: Spinning loader icon during upload ────────────── */
+.ti-loader-2 {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ── CENTER: Chat ──────────────────────────────────────────── */
