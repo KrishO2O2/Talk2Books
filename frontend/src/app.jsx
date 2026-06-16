@@ -149,7 +149,7 @@ function SourceCard({ source, index, active }) {
 export default function App() {
   const [uploading,    setUploading]    = useState(false);
   const fileInputRef = useRef(null);
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState('auto');
   const [showApp, setShowApp] = useState(false);
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState('');
@@ -272,7 +272,8 @@ export default function App() {
     setLoading(true);
 
     try {
-      const body = { question, language };
+      const body = { question };
+      if (language !== 'auto') body.language = language;
       if (activeDoc?.id) body.doc_id = activeDoc.id;
 
       const res = await fetch(`${API_BASE}/query`, {
@@ -648,6 +649,7 @@ export default function App() {
                   value={language}
                   onChange={e => setLanguage(e.target.value)}
                 >
+                  <option value="auto">Auto</option>
                   <option value="en">English</option>
                   <option value="hi">Hindi</option>
                   <option value="pa">Punjabi</option>
