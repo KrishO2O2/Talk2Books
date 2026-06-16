@@ -150,13 +150,7 @@ export default function App() {
   const [uploading,    setUploading]    = useState(false);
   const fileInputRef = useRef(null);
   const [language, setLanguage] = useState('en');
-  const [showApp, setShowApp] = useState(() => {
-    try {
-      return localStorage.getItem('ttb_entered') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [showApp, setShowApp] = useState(false);
   const [messages,   setMessages]   = useState([]);
   const [input,      setInput]      = useState('');
   const [loading,    setLoading]    = useState(false);
