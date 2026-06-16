@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 // ============================================================
 //  Talk²Books — LandingPage.jsx
 //  Matches the dark editorial design mockup exactly.
@@ -249,6 +251,98 @@ const STYLES = `
     from { transform: translateX(0); }
     to   { transform: translateX(-50%); }
   }
+
+  /* ── About Modal ──────────────────────────────────────── */
+.lp-about-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.lp-about {
+  width: 500px;
+  max-width: 92vw;
+  background: #232120;
+  border: 0.5px solid rgba(196,163,90,0.22);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.lp-about-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px;
+  border-bottom: 0.5px solid rgba(236,232,223,0.07);
+}
+.lp-about-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 22px;
+  font-weight: 300;
+  font-style: italic;
+  color: #ece8df;
+}
+.lp-about-close {
+  background: none;
+  border: none;
+  color: #6e6a65;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.lp-about-close:hover { color: #ece8df; }
+.lp-about-body { padding: 22px 28px 26px; }
+.lp-about-desc {
+  font-size: 14px;
+  color: #a09890;
+  line-height: 1.78;
+  margin: 0 0 22px 0;
+}
+.lp-about-label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #c4a35a;
+  margin-bottom: 10px;
+}
+.lp-about-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 22px;
+}
+.lp-about-chip {
+  font-size: 11px;
+  padding: 4px 12px;
+  background: rgba(196,163,90,0.08);
+  border: 0.5px solid rgba(196,163,90,0.2);
+  border-radius: 100px;
+  color: #c4a35a;
+}
+.lp-about-rows { display: flex; flex-direction: column; }
+.lp-about-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 0.5px solid rgba(236,232,223,0.07);
+  font-size: 14px;
+}
+.lp-about-row:last-child { border-bottom: none; }
+.lp-about-row span:first-child { color: #6e6a65; }
+.lp-about-row span:last-child  { color: #ece8df; font-weight: 500; }
+.lp-about-footer {
+  padding: 14px 28px;
+  border-top: 0.5px solid rgba(236,232,223,0.07);
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #3e3c38;
+}
 `;
 
 const TICKER = [
@@ -268,6 +362,15 @@ const TICKER = [
 ];
 
 export default function LandingPage({ onEnter }) {
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  useEffect(() => {
+    if (!aboutOpen) return;
+    const onKey = e => e.key === 'Escape' && setAboutOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [aboutOpen]);
+
   return (
     <>
       <style>{STYLES}</style>
@@ -281,8 +384,16 @@ export default function LandingPage({ onEnter }) {
           </div>
           <div className="lp-nav-links">
             <a href="#" className="lp-nav-link">DOCS</a>
-            <a href="#" className="lp-nav-link">GITHUB</a>
-            <a href="#" className="lp-nav-link">ABOUT</a>
+            <a href="https://github.com/sb7r/ttb"
+              className="lp-nav-link"
+              target="_blank"
+              rel="noopener noreferrer">
+              GITHUB
+            </a>
+            <a href="#" className="lp-nav-link"
+              onClick={e => { e.preventDefault(); setAboutOpen(true); }}>
+              ABOUT
+            </a>
           </div>
           <div className="lp-badge">v0.1 · local</div>
         </nav>
@@ -339,7 +450,52 @@ export default function LandingPage({ onEnter }) {
             ))}
           </div>
         </div>
+        {aboutOpen && (
+  <div className="lp-about-overlay" onClick={() => setAboutOpen(false)}>
+    <div className="lp-about" onClick={e => e.stopPropagation()}>
 
+      <div className="lp-about-header">
+        <span className="lp-about-title">About Talk<sup style={{fontSize:'12px',verticalAlign:'super'}}>2</sup>Books</span>
+        <button className="lp-about-close" onClick={() => setAboutOpen(false)}>✕</button>
+      </div>
+
+      <div className="lp-about-body">
+        <p className="lp-about-desc">
+          Talk²Books is a fully local, multilingual document intelligence system.
+          Upload any PDF, Word file, or text document and ask questions in plain
+          English, Hindi, Punjabi, or Sanskrit — all running privately on your
+          machine with no cloud dependency.
+        </p>
+
+        <span className="lp-about-label">Tech Stack</span>
+        <div className="lp-about-chips">
+          {['React 18','Quart (Python)','Qdrant','Ollama','phi4-mini',
+            'HuggingFace','LangChain','langdetect'].map(t => (
+            <span key={t} className="lp-about-chip">{t}</span>
+          ))}
+        </div>
+
+        <span className="lp-about-label">System</span>
+        <div className="lp-about-rows">
+          {[
+            ['Version',   'v0.1'],
+            ['Phase',     'Phase 4 — Complete'],
+            ['Embedding', 'all-mpnet-base-v2 · 768 dims'],
+            ['Privacy',   'Fully local · No cloud · No API keys'],
+          ].map(([k,v]) => (
+            <div key={k} className="lp-about-row">
+              <span>{k}</span><span>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="lp-about-footer">
+          LOCAL · PRIVATE · MULTILINGUAL · OPEN SOURCE
+        </div>
+      </div>
+    </div>
+  )}
       </div>
     </>
   );
