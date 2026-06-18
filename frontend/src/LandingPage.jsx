@@ -185,7 +185,7 @@ const STYLES = `
     inset: 0;
     background-image: radial-gradient(
       circle,
-      rgba(196,163,90,0.22) 1.3px,
+      rgba(196,163,90,0.45) 1.3px,
       transparent 1.3px
     );
     background-size: 28px 28px;
