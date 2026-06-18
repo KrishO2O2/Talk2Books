@@ -691,7 +691,7 @@ export default function App() {
                 <small>Ask a question to see retrieved passages</small>
               </div>
             ) : (
-              displaySources.map((src, i) => (
+              displaySources.slice(0, 3).map((src, i) => (
                 <SourceCard
                   key={i}
                   source={src}

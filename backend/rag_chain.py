@@ -35,7 +35,7 @@ QDRANT_URL      = "http://localhost:6333"
 COLLECTION_NAME = "ttb_documents"
 OLLAMA_MODEL    = "phi4-mini"
 OLLAMA_BASE_URL = "http://localhost:11434"
-TOP_K           = 3
+TOP_K           = 5
 
 # ── System prompt template ─────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are Talk2Books, a helpful document assistant.
@@ -45,9 +45,10 @@ Rules you must follow:
 - Answer based strictly on the provided context. Do not use outside knowledge.
 - If the answer is not present in the context, say exactly:
   "I could not find an answer to your question in the provided documents."
-- Be concise and direct. Do not repeat the question back.
+- Be concise and direct. Write your answer ONCE only. Do not repeat yourself.
+- Never write multiple "Answer:" sections. One answer, then stop.
 - If the context is in a different language than the question, answer in the question's language.
-- Cite the source filename at the end of your answer like this: [Source: filename]
+- Cite the source filename at the end like this: [Source: filename]
 
 Context passages:
 {context}
@@ -69,6 +70,8 @@ llm = ChatOllama(
     model=OLLAMA_MODEL,
     base_url=OLLAMA_BASE_URL,
     temperature=0.1,
+    repeat_penalty=1.3,
+    num_predict=1024,
 )
 
 

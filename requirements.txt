@@ -22,7 +22,7 @@ sentence-transformers        # all-mpnet-base-v2 (768-dim, spec Module 3)
 qdrant-client
 
 # ── Document Loaders ──────────────────────────────
-pypdf                        # PDF loading
+pymupdf                        # PDF loading
 docx2txt                     # .docx loading (spec Module 1 requirement)
 python-docx                  # .docx manipulation
 
