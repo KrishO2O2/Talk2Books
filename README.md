@@ -35,11 +35,9 @@ Talk²Books is an AI-powered document Q&A system built on RAG (Retrieval-Augment
 
 ## Demo
 
-<p align="center">
-  <b>Landing Page</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>Chat Interface</b> <br/>
-  <img src="docs/landing.png" width="49%" />
-  <img src="docs/chat.png" width="49%" />
-</p>
+| Landing Page | Chat Interface |
+|---|---|
+| ![Landing](./docs/landing.png) | ![Chat](./docs/chat.png) |
 
 > *Screenshots: dark editorial UI with Cormorant Garamond + DM Sans typography*
 
