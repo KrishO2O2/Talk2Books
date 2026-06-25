@@ -6,7 +6,6 @@
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)
 ![Qdrant](https://img.shields.io/badge/Qdrant-local-DC143C?style=flat)
 ![Ollama](https://img.shields.io/badge/Ollama-phi4--mini-black?style=flat)
-![License](https://img.shields.io/badge/license-MIT-green?style=flat)
 
 ---
 
