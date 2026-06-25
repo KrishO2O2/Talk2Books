@@ -345,7 +345,7 @@ Built during a summer internship at the **Indian Institute of Technology Ropar**
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+AGPL-3.0 License — see [LICENSE](LICENSE) for details.
 
 ---
 
