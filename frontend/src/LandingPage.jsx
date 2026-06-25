@@ -384,7 +384,7 @@ export default function LandingPage({ onEnter }) {
           </div>
           <div className="lp-nav-links">
             <a href="#" className="lp-nav-link">DOCS</a>
-            <a href="https://github.com/sb7r/ttb"
+            <a href="https://github.com/KrishO2O2/Talk2Books"
               className="lp-nav-link"
               target="_blank"
               rel="noopener noreferrer">
